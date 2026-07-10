@@ -200,8 +200,7 @@
   <canvas id="c"></canvas>
   <div id="menu-ui">
     <h1>KEYBOUND</h1>
-    <p>BAŞLAMAK İÇİN YAZ</p>
-    <p id="btn-settings" onclick="openSettings()" style="margin-top:20px; font-size:14px; color:rgba(210,195,180,0.6); letter-spacing:4px; cursor:pointer; display:inline-block; padding:10px; transition:color 0.2s;">[ AYARLAR ]</p>
+    <p>SEÇİM YAPMAK İÇİN YAZ</p>
   </div>
   <div id="mode-select-ui">
     <div class="mode-card">
@@ -365,12 +364,45 @@ function getNoiseBuffer(){
 function keyClack(type){
   try{
     ensureAudio();
-    const t=audioCtx.currentTime, hit=type==='hit';
-    const src=audioCtx.createBufferSource();
-    src.buffer=getNoiseBuffer();
-    const f=audioCtx.createBiquadFilter();
-    f.type='bandpass';
-    o.start(t);o.stop(t+0.045);
+    const t=audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    
+    if(type==='hit'){
+      osc.type='square';
+      if (userSettings.switchType === 0) {
+        osc.frequency.setValueAtTime(400+Math.random()*200,t);
+        osc.frequency.exponentialRampToValueAtTime(800,t+0.05);
+        gain.gain.setValueAtTime(0.15,t);
+        gain.gain.exponentialRampToValueAtTime(0.01,t+0.05);
+      } else if (userSettings.switchType === 1) {
+        osc.type='triangle';
+        osc.frequency.setValueAtTime(250+Math.random()*100,t);
+        osc.frequency.exponentialRampToValueAtTime(100,t+0.08);
+        gain.gain.setValueAtTime(0.2,t);
+        gain.gain.exponentialRampToValueAtTime(0.01,t+0.08);
+      } else {
+        osc.type='sine';
+        osc.frequency.setValueAtTime(150+Math.random()*50,t);
+        osc.frequency.exponentialRampToValueAtTime(80,t+0.08);
+        gain.gain.setValueAtTime(0.15,t);
+        gain.gain.exponentialRampToValueAtTime(0.01,t+0.08);
+      }
+    } else if(type==='wrong'){
+      osc.type='sawtooth';
+      osc.frequency.setValueAtTime(150,t);
+      osc.frequency.exponentialRampToValueAtTime(40,t+0.2);
+      gain.gain.setValueAtTime(0.3,t);
+      gain.gain.exponentialRampToValueAtTime(0.01,t+0.2);
+    } else {
+      osc.type='sine';
+      osc.frequency.setValueAtTime(600,t);
+      osc.frequency.exponentialRampToValueAtTime(1200,t+0.1);
+      gain.gain.setValueAtTime(0.1,t);
+      gain.gain.exponentialRampToValueAtTime(0.01,t+0.1);
+    }
+    osc.start(t);
+    osc.stop(t+0.2);
   }catch(e){}
 }
 function playSuccess(){
@@ -414,6 +446,7 @@ function updateSettingsUI() {
 function openSettings() {
   if (gameState !== 'MENU') return;
   gameState = 'SETTINGS';
+  menuWords = []; // clear menu words
   document.body.classList.add('settings-active');
   document.getElementById('menu-ui').style.opacity = '0';
   document.getElementById('menu-ui').style.pointerEvents = 'none';
@@ -426,6 +459,7 @@ function closeSettings() {
   document.body.classList.remove('settings-active');
   document.getElementById('menu-ui').style.opacity = '1';
   document.getElementById('menu-ui').style.pointerEvents = 'auto';
+  spawnMenuWord(); // respawn words when coming back
 }
 
 function toggleSetting(id) {
@@ -458,24 +492,38 @@ const WORD_POOL = [
 ];
 const MS_PER_LETTER = 620;
 let word = null;
+let menuWords = [];
 let nextSpawnAt = performance.now()+600;
 
 function spawnMenuWord(){
-  const letters = ['O','Y','N','A'];
-  word = {
-    letters, index:0,
-    spawnedAt:performance.now(),
-    duration:Infinity,
-    boxes:letters.map((_,i)=>{
-      const seed = Math.floor(Math.random()*99999+i*1000);
-      return {
-        wf:0, pf:0, bounce:0, seed,
-        sketchPath: generateSketchPath(56, 52, seed),
-        edgePath: generateEdgePath(56, 52, seed)
-      };
-    }),
-    enter:0
-  };
+  const w1 = ['O','Y','N','A'];
+  const w2 = ['A','Y','A','R','L','A','R'];
+  
+  menuWords = [
+    {
+      letters: w1, index: 0, action: 'PLAY',
+      boxes: w1.map((_,i)=>{
+        const seed = Math.floor(Math.random()*99999+i*1000);
+        return {
+          wf:0, pf:0, bounce:0, seed,
+          sketchPath: generateSketchPath(56, 52, seed),
+          edgePath: generateEdgePath(56, 52, seed)
+        };
+      })
+    },
+    {
+      letters: w2, index: 0, action: 'SETTINGS',
+      boxes: w2.map((_,i)=>{
+        const seed = Math.floor(Math.random()*99999+i*2000);
+        return {
+          wf:0, pf:0, bounce:0, seed,
+          sketchPath: generateSketchPath(44, 42, seed),
+          edgePath: generateEdgePath(44, 42, seed)
+        };
+      })
+    }
+  ];
+  word = null;
 }
 
 function spawnWord(){
@@ -529,11 +577,15 @@ function completeWord(){
   const c=wordCenter();
 
   if (gameState === 'MENU') {
-    gameState = 'MODESELECT';
-    document.body.classList.add('mode-select-active');
-    document.getElementById('menu-ui').style.opacity = '0';
-    playSuccess();
-    word=null;
+    if (word.action === 'SETTINGS') {
+      openSettings();
+    } else {
+      gameState = 'MODESELECT';
+      document.body.classList.add('mode-select-active');
+      document.getElementById('menu-ui').style.opacity = '0';
+      playSuccess();
+      word=null;
+    }
     return;
   }
 
@@ -649,8 +701,7 @@ window.addEventListener('keydown',(e)=>{
       document.getElementById('menu-ui').style.pointerEvents = 'auto';
       document.getElementById('menu-ui').innerHTML = `
         <h1>KEYBOUND</h1>
-        <p>BAŞLAMAK İÇİN YAZ</p>
-        <p id="btn-settings" onclick="openSettings()" style="margin-top:20px; font-size:14px; color:rgba(210,195,180,0.6); letter-spacing:4px; cursor:pointer; display:inline-block; padding:10px; transition:color 0.2s;">[ AYARLAR ]</p>
+        <p>SEÇİM YAPMAK İÇİN YAZ</p>
       `;
       spawnMenuWord();
     }
@@ -672,15 +723,37 @@ window.addEventListener('keydown',(e)=>{
       document.getElementById('menu-ui').style.pointerEvents = 'auto';
       document.getElementById('menu-ui').innerHTML = `
         <h1>KEYBOUND</h1>
-        <p>BAŞLAMAK İÇİN YAZ</p>
-        <p id="btn-settings" onclick="openSettings()" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(210,195,180,0.6)'" style="margin-top:20px; font-size:14px; color:rgba(210,195,180,0.6); letter-spacing:4px; cursor:pointer; display:inline-block; padding:10px; transition:color 0.2s;">[ AYARLAR ]</p>
+        <p>SEÇİM YAPMAK İÇİN YAZ</p>
       `;
       spawnMenuWord();
     }
     return;
   }
 
-  if(!word||performance.now()<state.frozenUntil) return;
+  if(!word) {
+    if (gameState === 'MENU' && menuWords) {
+      for (let i = 0; i < menuWords.length; i++) {
+        const mw = menuWords[i];
+        if (mw.letters[0] === key) {
+          word = mw;
+          word.duration = Infinity;
+          word.enter = 1;
+          word.boxes[0].pf = 1;
+          word.boxes[0].bounce = 1;
+          word.index = 1;
+          keyClack('hit');
+          return;
+        }
+      }
+      if (/^[A-ZÇĞİÖŞÜ]$/.test(key)) {
+        keyClack('wrong');
+        state.shake = 0.08;
+      }
+    }
+    return;
+  }
+
+  if(performance.now()<state.frozenUntil || gameState !== 'PLAYING' && gameState !== 'MENU') return;
 
   const expected=word.letters[word.index];
   if(key===expected){
@@ -950,6 +1023,32 @@ function drawKeycap(cx, cy, w, h, label, status, liftT, wrongFlash, bounce, box)
 
 /* ── Draw active word ── */
 function drawWord(now, dt){
+  if (gameState === 'MENU' && !word) {
+    if (menuWords && menuWords[0]) {
+      const w0 = menuWords[0], boxW=56, gap=12, boxH=52;
+      const totalW = w0.letters.length*boxW + (w0.letters.length-1)*gap;
+      const startX = CX - totalW/2;
+      for(let i=0;i<w0.letters.length;i++){
+        let st = i<w0.index ? 'past' : i===w0.index ? 'expected' : 'waiting';
+        const box=w0.boxes[i];
+        if(box.bounce>0) box.bounce=Math.max(0,box.bounce-dt*4);
+        drawKeycap(startX+i*(boxW+gap)+boxW/2, CY+40, boxW, boxH, w0.letters[i], st, 0, box.pf, box.bounce, box);
+      }
+    }
+    if (menuWords && menuWords[1]) {
+      const w1 = menuWords[1], boxW=44, gap=8, boxH=42;
+      const totalW = w1.letters.length*boxW + (w1.letters.length-1)*gap;
+      const startX = CX - totalW/2;
+      for(let i=0;i<w1.letters.length;i++){
+        let st = i<w1.index ? 'past' : i===w1.index ? 'expected' : 'waiting';
+        const box=w1.boxes[i];
+        if(box.bounce>0) box.bounce=Math.max(0,box.bounce-dt*4);
+        drawKeycap(startX+i*(boxW+gap)+boxW/2, CY+140, boxW, boxH, w1.letters[i], st, 0, box.pf, box.bounce, box);
+      }
+    }
+    return;
+  }
+  
   if(!word) return;
   const c = wordCenter();
   word.enter = Math.min(1, word.enter + dt*3.5);
@@ -1232,7 +1331,7 @@ function loop(now){
         }
       }
     } else if (gameState === 'MENU') {
-      if(!word) spawnMenuWord();
+      if(!word && (!menuWords || menuWords.length === 0)) spawnMenuWord();
     }
   }
   updateShake(dt);
