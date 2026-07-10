@@ -136,6 +136,27 @@
   .mode-card h3 { color: #d4a855; margin-bottom: 15px; font-size: 22px; letter-spacing: 3px;}
   .mode-card p { color: rgba(210,195,180,0.6); font-size: 13px; line-height: 1.6; font-family:'JetBrains Mono', monospace;}
 
+  /* Pause UI */
+  #pause-ui {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    background: rgba(20,15,12,0.85); backdrop-filter: blur(10px);
+    opacity: 0; pointer-events: none; z-index: 30;
+    transition: opacity 0.3s ease;
+  }
+  .paused #pause-ui { opacity: 1; pointer-events: auto; }
+  #pause-ui h2 { color: #e8e2d8; font-size: 42px; letter-spacing: 8px; margin-bottom: 40px; text-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+  .pause-options { display: flex; gap: 30px; }
+  .pause-item { 
+    background: rgba(255,255,255,0.05); padding: 15px 25px; border-radius: 12px;
+    color: rgba(210,195,180,0.8); font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center;
+  }
+  .pause-item .key { 
+    display: inline-block; background: #d4a855; color: #1a1614; font-weight: 800;
+    padding: 6px 12px; border-radius: 6px; margin-right: 15px; box-shadow: 0 4px 0 #b0a898;
+  }
+
   #hud, #combo-wrap, #streak, #log, #footer { opacity: 0; transition: opacity 0.5s ease; }
   .playing #hud, .playing #combo-wrap, .playing #streak, .playing #log, .playing #footer { opacity: 1; }
 </style>
@@ -162,6 +183,13 @@
       <div class="mode-key">A</div>
       <h3>ACIMASIZ</h3>
       <p>Hata yapmak veya süreyi kaçırmak yasak. Affı yok.</p>
+    </div>
+  </div>
+  <div id="pause-ui">
+    <h2>DURAKLATILDI</h2>
+    <div class="pause-options">
+      <div class="pause-item"><span class="key">ESC</span> DEVAM ET</div>
+      <div class="pause-item"><span class="key">Q</span> MENÜYE DÖN</div>
     </div>
   </div>
   <div id="hud">
@@ -325,6 +353,7 @@ function playSuccess(){
 /* ── State ── */
 let gameState = 'MENU';
 let currentMode = 'NORMAL';
+let pausedAt = 0;
 
 const state = {
   tempo:1, targetTempo:1, combo:0, maxCombo:0,
@@ -492,7 +521,39 @@ function gameOver(reason) {
 }
 
 window.addEventListener('keydown',(e)=>{
+  if (e.key === 'Escape') {
+    if (gameState === 'PLAYING') {
+      gameState = 'PAUSED';
+      pausedAt = performance.now();
+      document.body.classList.add('paused');
+      return;
+    } else if (gameState === 'PAUSED') {
+      const pauseDur = performance.now() - pausedAt;
+      if(word) word.spawnedAt += pauseDur;
+      nextSpawnAt += pauseDur;
+      state.frozenUntil += pauseDur;
+      gameState = 'PLAYING';
+      document.body.classList.remove('paused');
+      return;
+    }
+  }
+
   const key=e.key.toLocaleUpperCase('tr-TR');
+
+  if (gameState === 'PAUSED') {
+    if (key === 'Q') {
+      gameState = 'MENU';
+      document.body.classList.remove('paused');
+      document.body.classList.remove('playing');
+      document.getElementById('menu-ui').style.opacity = '1';
+      document.getElementById('menu-ui').innerHTML = `
+        <h1>KEYBOUND</h1>
+        <p>BAŞLAMAK İÇİN YAZ</p>
+      `;
+      spawnMenuWord();
+    }
+    return;
+  }
 
   if (gameState === 'MODESELECT') {
     if (key === 'S') startGame('SERBEST');
@@ -1047,16 +1108,18 @@ function updateAndDrawFallingWords(dt) {
 /* ── Main Loop ── */
 let lastT=performance.now();
 function loop(now){
-  const dt=Math.min(0.05,(now-lastT)/1000);
+  const isPaused = gameState === 'PAUSED';
+  const dt = isPaused ? 0 : Math.min(0.05,(now-lastT)/1000);
   lastT=now;
   const frozen=now<state.frozenUntil;
+  const effectiveNow = isPaused ? pausedAt : now;
 
-  if(!frozen){
+  if(!frozen && !isPaused){
     if(gameState === 'PLAYING'){
       state.tempo+=(state.targetTempo-state.tempo)*dt*1.5;
-      if(!word&&now>=nextSpawnAt) spawnWord();
+      if(!word&&effectiveNow>=nextSpawnAt) spawnWord();
       if(word){
-        const elapsed=(now-word.spawnedAt)*state.tempo;
+        const elapsed=(effectiveNow-word.spawnedAt)*state.tempo;
         if(elapsed>=word.duration) {
           if (currentMode === 'ACIMASIZ') gameOver('SÜRE DOLDU');
           else missWord('SÜRE DOLDU');
@@ -1071,9 +1134,9 @@ function loop(now){
   ctx.save();
   ctx.translate(state.sx,state.sy);
 
-  drawBackground(now);
+  drawBackground(effectiveNow);
   updateAndDrawFallingWords(dt);
-  drawWord(now,frozen?0:dt);
+  drawWord(effectiveNow, frozen ? 0 : dt);
   drawBursts(dt);
   drawGlitch(dt);
 
