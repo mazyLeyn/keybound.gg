@@ -94,6 +94,1157 @@
   /* Main Menu UI */
   #menu-ui{
     position:absolute; top:25%; left:0; right:0;
+    text-align:center; pointer-events:none; z-index:20;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  #menu-ui h1 {
+    color:#e8e2d8;
+    font-size:48px; letter-spacing:10px;
+    font-weight:900; margin-bottom:16px;
+    text-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  #menu-ui p {
+    color:rgba(210,195,180,0.6);
+    font-size:14px; letter-spacing:4px;
+    font-family:'JetBrains Mono', monospace;
+  }
+  
+  .playing #menu-ui { opacity: 0; transform: translateY(-20px); }
+  
+  /* Mode Select UI */
+  #mode-select-ui {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: center; align-items: center; gap: 30px;
+    opacity: 0; pointer-events: none; z-index: 25;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    transform: translateY(20px);
+  }
+  .mode-select-active #mode-select-ui {
+    opacity: 1; transform: translateY(0); pointer-events: auto;
+  }
+  .mode-card {
+    background: rgba(26,20,18,0.7); border: 1px solid rgba(255,255,255,0.05);
+    padding: 40px 25px; border-radius: 16px; text-align: center; width: 280px;
+    backdrop-filter: blur(12px); box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .mode-key {
+    display: inline-block; background: #e8e2d8; color: #3a3530;
+    font-size: 32px; font-weight: 900; padding: 12px 28px; border-radius: 10px;
+    box-shadow: 0 6px 0 #b0a898, 0 10px 20px rgba(0,0,0,0.4);
+    margin-bottom: 25px; font-family: 'Inter', sans-serif;
+  }
+  .mode-card h3 { color: #d4a855; margin-bottom: 15px; font-size: 22px; letter-spacing: 3px;}
+  .mode-card p { color: rgba(210,195,180,0.6); font-size: 13px; line-height: 1.6; font-family:'JetBrains Mono', monospace;}
+
+  /* Pause UI */
+  #pause-ui {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    background: rgba(20,15,12,0.85); backdrop-filter: blur(10px);
+    opacity: 0; pointer-events: none; z-index: 30;
+    transition: opacity 0.3s ease;
+  }
+  .paused #pause-ui { opacity: 1; pointer-events: auto; }
+  #pause-ui h2 { color: #e8e2d8; font-size: 42px; letter-spacing: 8px; margin-bottom: 40px; text-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+  .pause-options { display: flex; gap: 30px; }
+  .pause-item { 
+    background: rgba(255,255,255,0.05); padding: 15px 25px; border-radius: 12px;
+    color: rgba(210,195,180,0.8); font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center;
+  }
+  .pause-item .key { 
+    display: inline-block; background: #d4a855; color: #1a1614; font-weight: 800;
+    padding: 6px 12px; border-radius: 6px; margin-right: 15px; box-shadow: 0 4px 0 #b0a898;
+  }
+
+  #hud, #combo-wrap, #streak, #log, #footer { opacity: 0; transition: opacity 0.5s ease; }
+  .playing #hud, .playing #combo-wrap, .playing #streak, .playing #log, .playing #footer { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="menu-ui">
+    <h1>KEYBOUND</h1>
+    <p>BAŞLAMAK İÇİN YAZ</p>
+  </div>
+  <div id="mode-select-ui">
+    <div class="mode-card">
+      <div class="mode-key">S</div>
+      <h3>SERBEST</h3>
+      <p>Yanma yok, süre yok. Sadece rahatla ve yaz.</p>
+    </div>
+    <div class="mode-card">
+      <div class="mode-key">N</div>
+      <h3>NORMAL</h3>
+      <p>Süreye karşı yarış. Hata yaparsan kombon sıfırlanır.</p>
+    </div>
+    <div class="mode-card">
+      <div class="mode-key">A</div>
+      <h3>ACIMASIZ</h3>
+      <p>Hata yapmak veya süreyi kaçırmak yasak. Affı yok.</p>
+    </div>
+  </div>
+  <div id="pause-ui">
+    <h2>DURAKLATILDI</h2>
+    <div class="pause-options">
+      <div class="pause-item"><span class="key">ESC</span> DEVAM ET</div>
+      <div class="pause-item"><span class="key">Q</span> MENÜYE DÖN</div>
+    </div>
+  </div>
+  <div id="hud">
+    <div class="hud-box"><span class="label">TEMPO</span><span class="value" id="tempo">100%</span></div>
+    <div class="hud-title">KEYBOUND</div>
+    <div class="hud-box"><span class="label">ACC</span><span class="value" id="acc">--</span></div>
+  </div>
+  <div id="combo-wrap"><div id="combo">COMBO 0</div></div>
+  <div id="streak"></div>
+  <div id="log"></div>
+  <div id="footer">kelimeyi bar bitmeden yaz</div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+let ctx = canvas.getContext('2d');
+let W, H, CX, CY;
+
+let bgCanvas = null;
+function createBackgroundCache() {
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = W;
+  bgCanvas.height = H;
+  const bctx = bgCanvas.getContext('2d');
+
+  // Base gradient
+  const bg=bctx.createRadialGradient(CX,CY,0,CX,CY,Math.max(W,H)*0.7);
+  bg.addColorStop(0,'#352e28');
+  bg.addColorStop(0.6,'#2c2420');
+  bg.addColorStop(1,'#221c18');
+  bctx.fillStyle=bg;
+  bctx.fillRect(0,0,W,H);
+
+  // Subtle fabric/felt texture (noise-like pattern)
+  bctx.save();
+  bctx.globalAlpha=0.03;
+  const step=6;
+  for(let y=0;y<H;y+=step){
+    for(let x=0;x<W;x+=step){
+      const v = Math.sin(x*0.1+y*0.15)*0.5+0.5;
+      bctx.fillStyle = v>0.5 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
+      bctx.fillRect(x,y,step,step);
+    }
+  }
+  bctx.restore();
+}
+
+function resize(){
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  CX = W/2; CY = H/2;
+  if(W > 0 && H > 0) createBackgroundCache();
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ── Seeded random for consistent sketch lines per key ── */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function generateSketchPath(w, h, seed) {
+  const rng = mulberry32(seed);
+  const path = new Path2D();
+  for(let i=0; i<8; i++){
+    const x1 = rng()*w;
+    const y1 = rng()*h;
+    const len = 8 + rng()*18;
+    const ang = -0.6 + rng()*0.4;
+    path.moveTo(x1, y1);
+    path.lineTo(x1 + Math.cos(ang)*len, y1 + Math.sin(ang)*len);
+  }
+  for(let i=0; i<3; i++){
+    const x1 = rng()*w*0.8;
+    const y1 = h*0.3 + rng()*h*0.5;
+    path.moveTo(x1, y1);
+    path.quadraticCurveTo(x1 + rng()*15 - 5, y1 + rng()*12 - 6, x1 + 10 + rng()*12, y1 + rng()*8 - 4);
+  }
+  return path;
+}
+
+function generateEdgePath(w, h, seed) {
+  const rng = mulberry32(seed);
+  const path = new Path2D();
+  for(let i=0; i<4; i++){
+    const x1 = 4 + rng()*(w-8);
+    const y1 = h - 5 - rng()*6;
+    path.moveTo(x1, y1);
+    path.lineTo(x1 + 6 + rng()*10, y1 + 2 + rng()*3);
+  }
+  for(let i=0; i<3; i++){
+    const x1 = w - 6 - rng()*5;
+    const y1 = 6 + rng()*(h-12);
+    path.moveTo(x1, y1);
+    path.lineTo(x1 + 2 + rng()*3, y1 + 5 + rng()*8);
+  }
+  return path;
+}
+
+/* ── Audio ── */
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+}
+let noiseBuffer = null;
+function getNoiseBuffer(){
+  ensureAudio();
+  if(noiseBuffer) return noiseBuffer;
+  const sz = audioCtx.sampleRate*0.08;
+  noiseBuffer = audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+  const d = noiseBuffer.getChannelData(0);
+  for(let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+  return noiseBuffer;
+}
+function keyClack(type){
+  try{
+    ensureAudio();
+    const t=audioCtx.currentTime, hit=type==='hit';
+    const src=audioCtx.createBufferSource();
+    src.buffer=getNoiseBuffer();
+    const f=audioCtx.createBiquadFilter();
+    f.type='bandpass';
+    f.frequency.value=hit?(2400+Math.random()*500):(900+Math.random()*200);
+    f.Q.value=hit?1.3:0.8;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(hit?0.14:0.04,t);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+(hit?0.045:0.035));
+    src.connect(f);f.connect(g);g.connect(audioCtx.destination);
+    src.start(t);src.stop(t+0.05);
+    const o=audioCtx.createOscillator(),og=audioCtx.createGain();
+    o.type='sine';
+    o.frequency.value=hit?160:90;
+    og.gain.setValueAtTime(hit?0.06:0.025,t);
+    og.gain.exponentialRampToValueAtTime(0.0001,t+0.04);
+    o.connect(og);og.connect(audioCtx.destination);
+    o.start(t);o.stop(t+0.045);
+  }catch(e){}
+}
+function playSuccess(){
+  try{
+    ensureAudio();
+    const t=audioCtx.currentTime;
+    [523.25,659.25,783.99,1046.50].forEach((freq,i)=>{
+      const s=t+i*0.055,d=0.26;
+      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+      o.type='triangle';o.frequency.value=freq;
+      g.gain.setValueAtTime(0.0001,s);
+      g.gain.linearRampToValueAtTime(0.07,s+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,s+d);
+      o.connect(g);g.connect(audioCtx.destination);
+      o.start(s);o.stop(s+d+0.02);
+    });
+  }catch(e){}
+}
+
+/* ── State ── */
+let gameState = 'MENU';
+let currentMode = 'NORMAL';
+let pausedAt = 0;
+
+const state = {
+  tempo:1, targetTempo:1, combo:0, maxCombo:0,
+  wordsCompleted:0, wordsMissed:0,
+  glitch:0, frozenUntil:0,
+  shake:0, sx:0, sy:0
+};
+
+/* ── Words ── */
+const WORD_POOL = [
+  'SES','YOL','ANI','TON','GÜÇ','HIZ','KAÇ','TUŞ','SIR','AŞK','GÖZ','KOL','ISI','ZİL','TAŞ','KUM','SAZ','KOD','BAĞ','ÇİP','FON','HİS','KAN','KAS','KÖK','NOT','OKU','PİL','RUH','SAF','YAZ','ZOR',
+  'ATEŞ','IŞIK','ODAK','AKIŞ','NOTA','RÜYA','TREN','KAPI','ÇARK','UYUM','DOKU','SIRT','İVME','DOLU','KATI','SIVI','AĞIR','AKIM','ALAN','ARAÇ','BANT','BLOK','DATA','ESER','FORM','HARF','HATA','KARE','KASA','KLAN','KURS','LİNK','MOLA','NORM','ONAY','OYUN','ÖYKÜ','PLAN','PUAN','RİSK','SAYI','SKOR','TEST','VERİ','YAPI',
+  'RİTİM','DENGE','ZAMAN','NABIZ','GÜNEŞ','BULUT','ÇEVİK','TEMPO','NEFES','YÜZEY','DALGA','DUMAN','GÖLGE','KİLİT','DÜĞÜM','ÇİZGİ','PARÇA','AKORT','EKRAN','KABLO','DÜZEN','ANLAM','YANKI','DÖNGÜ','HAFİF','VURUŞ','AHENK','AKTİF','ARŞİV','BİÇİM','CEVAP','CİHAZ','ÇÖZÜM','DEĞER','DETAY','DİKEY','DOĞRU','DOSYA','EFEKT','FİKİR','FOKUS','GİRİŞ','GÖRÜŞ','GURUR','HACİM','HEDEF','HESAP','HÜCRE','İŞLEM','KAYIT','KURAL','MANTIK','METİN','MÜZİK','NESNE','ORTAM','PANEL','PROJE','ROBOT','SANAT','SINIR','SİLAH','TABLO','TEMA','TEORİ','UZMAN','ÜNİTE','VİDEO','YATAY','YAYIN','YORUM','ZEMİN',
+  'BAŞARI','BELLEK','BOŞLUK','DİKKAT','EFSANE','ENERJİ','KLAVYE','KUVVET','MİKTAR','SİSTEM','SÜRÜCÜ','ŞİDDET','YAZILIM','GELİŞİM','BİLİŞİM','TEKNİK','GÜNCEL','SÖZCÜK','YÖNTEM','HAREKET','AŞAĞI','YUKARI','SESSİZ','GÖRÜNTÜ'
+];
+const MS_PER_LETTER = 620;
+let word = null;
+let nextSpawnAt = performance.now()+600;
+
+function spawnMenuWord(){
+  const letters = ['O','Y','N','A'];
+  word = {
+    letters, index:0,
+    spawnedAt:performance.now(),
+    duration:Infinity,
+    boxes:letters.map((_,i)=>{
+      const seed = Math.floor(Math.random()*99999+i*1000);
+      return {
+        wf:0, pf:0, bounce:0, seed,
+        sketchPath: generateSketchPath(56, 52, seed),
+        edgePath: generateEdgePath(56, 52, seed)
+      };
+    }),
+    enter:0
+  };
+}
+
+function spawnWord(){
+  const raw = WORD_POOL[Math.floor(Math.random()*WORD_POOL.length)];
+  const letters = raw.split('');
+  word = {
+    letters, index:0,
+    spawnedAt:performance.now(),
+    duration: currentMode === 'SERBEST' ? Infinity : letters.length*MS_PER_LETTER,
+    boxes:letters.map((_,i)=>{
+      const seed = Math.floor(Math.random()*99999+i*1000);
+      return {
+        wf:0, pf:0, bounce:0, seed,
+        sketchPath: generateSketchPath(56, 52, seed),
+        edgePath: generateEdgePath(56, 52, seed)
+      };
+    }),
+    enter:0
+  };
+}
+
+/* ── HUD ── */
+const logEl=document.getElementById('log');
+function logLine(t,c){
+  const d=document.createElement('div');
+  d.innerHTML=`<span class="${c}">${t}</span>`;
+  logEl.prepend(d);
+  while(logEl.childNodes.length>6) logEl.removeChild(logEl.lastChild);
+}
+const comboEl=document.getElementById('combo');
+const streakEl=document.getElementById('streak');
+function updateHud(){
+  comboEl.textContent=`COMBO ${state.combo}`;
+  comboEl.classList.add('pop');
+  setTimeout(()=>comboEl.classList.remove('pop'),120);
+  document.getElementById('tempo').textContent=`${Math.round(state.tempo*100)}%`;
+  const tot=state.wordsCompleted+state.wordsMissed;
+  const acc=tot?Math.round((state.wordsCompleted/tot)*100):null;
+  document.getElementById('acc').textContent=acc===null?'--':acc+'%';
+  if(state.combo>=5){
+    streakEl.classList.add('show');
+    streakEl.textContent=state.combo>=15?'UNSTOPPABLE':state.combo>=10?'ON FIRE':'STREAK x'+state.combo;
+  } else streakEl.classList.remove('show');
+}
+function wordCenter(){
+  if (gameState === 'MENU') return {x:CX, y:CY+40};
+  return {x:CX, y:CY+10};
+}
+
+function completeWord(){
+  const c=wordCenter();
+
+  if (gameState === 'MENU') {
+    gameState = 'MODESELECT';
+    document.body.classList.add('mode-select-active');
+    document.getElementById('menu-ui').style.opacity = '0';
+    playSuccess();
+    word=null;
+    return;
+  }
+
+  state.combo+=1;
+  if(state.combo>state.maxCombo) state.maxCombo=state.combo;
+  state.wordsCompleted+=1;
+  state.targetTempo=Math.min(1.15,1.0+state.combo*0.015);
+  playSuccess();
+  // subtle burst
+  for(let i=0;i<12;i++){
+    const a=Math.random()*Math.PI*2, sp=60+Math.random()*120;
+    bursts.push({
+      x:c.x, y:c.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-50,
+      life:0.6+Math.random()*0.4, ml:0.6+Math.random()*0.4,
+      size:2+Math.random()*2,
+      type: Math.random()>0.5?'gold':'cream'
+    });
+  }
+  logLine(`TAMAM  '${word.letters.join('')}'  +combo ${state.combo}`,'hit');
+  updateHud();
+  word=null; nextSpawnAt=performance.now()+480;
+}
+function missWord(reason){
+  state.combo=0; state.wordsMissed+=1;
+  state.glitch=0.2; state.shake=0.25;
+  state.targetTempo=Math.max(0.7,state.tempo-0.1);
+  state.frozenUntil=performance.now()+220;
+  logLine(`KACTI  '${word.letters.join('')}'  (${reason})`,'miss');
+  updateHud();
+  word=null; nextSpawnAt=performance.now()+650;
+}
+
+function startGame(mode) {
+  currentMode = mode;
+  gameState = 'PLAYING';
+  document.body.classList.remove('mode-select-active');
+  document.body.classList.add('playing');
+  
+  state.combo=0; state.maxCombo=0;
+  state.wordsCompleted=0; state.wordsMissed=0;
+  state.tempo=1; state.targetTempo=1;
+  updateHud();
+  playSuccess();
+  
+  const c=wordCenter();
+  for(let i=0;i<16;i++){
+    const a=Math.random()*Math.PI*2, sp=80+Math.random()*150;
+    bursts.push({
+      x:c.x, y:c.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-50,
+      life:0.6+Math.random()*0.5, ml:0.6+Math.random()*0.5,
+      size:2.5+Math.random()*2,
+      type: Math.random()>0.5?'gold':'cream'
+    });
+  }
+  logEl.innerHTML='';
+  logLine(`MOD: ${mode} -- BAŞLIYOR`, 'hit');
+  word=null; nextSpawnAt=performance.now()+500;
+}
+
+function gameOver(reason) {
+  gameState = 'GAMEOVER';
+  word = null;
+  document.body.classList.remove('playing');
+  document.body.classList.add('game-over');
+  document.getElementById('menu-ui').style.opacity = '1';
+  document.getElementById('menu-ui').innerHTML = `
+    <h1 style="color:#c45c4a; font-size:40px;">OYUN BİTTİ</h1>
+    <p style="font-size:16px;">${reason}</p>
+    <p style="margin-top:24px; color:#d4a855; font-size:12px; letter-spacing:2px;">MENÜYE DÖNMEK İÇİN <span style="color:#fff; font-weight:800; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px;">SPACE</span> BAS</p>
+  `;
+  logLine(`OYUN BİTTİ: ${reason}`, 'miss');
+}
+
+window.addEventListener('keydown',(e)=>{
+  if (e.key === 'Escape') {
+    if (gameState === 'PLAYING') {
+      gameState = 'PAUSED';
+      pausedAt = performance.now();
+      document.body.classList.add('paused');
+      return;
+    } else if (gameState === 'PAUSED') {
+      const pauseDur = performance.now() - pausedAt;
+      if(word) word.spawnedAt += pauseDur;
+      nextSpawnAt += pauseDur;
+      state.frozenUntil += pauseDur;
+      gameState = 'PLAYING';
+      document.body.classList.remove('paused');
+      return;
+    }
+  }
+
+  const key=e.key.toLocaleUpperCase('tr-TR');
+
+  if (gameState === 'PAUSED') {
+    if (key === 'Q') {
+      gameState = 'MENU';
+      document.body.classList.remove('paused');
+      document.body.classList.remove('playing');
+      document.getElementById('menu-ui').style.opacity = '1';
+      document.getElementById('menu-ui').innerHTML = `
+        <h1>KEYBOUND</h1>
+        <p>BAŞLAMAK İÇİN YAZ</p>
+      `;
+      spawnMenuWord();
+    }
+    return;
+  }
+
+  if (gameState === 'MODESELECT') {
+    if (key === 'S') startGame('SERBEST');
+    else if (key === 'N') startGame('NORMAL');
+    else if (key === 'A') startGame('ACIMASIZ');
+    return;
+  }
+  
+  if (gameState === 'GAMEOVER') {
+    if (e.code === 'Space') {
+      gameState = 'MENU';
+      document.body.classList.remove('game-over');
+      document.getElementById('menu-ui').innerHTML = `
+        <h1>KEYBOUND</h1>
+        <p>BAŞLAMAK İÇİN YAZ</p>
+      `;
+      spawnMenuWord();
+    }
+    return;
+  }
+
+  if(!word||performance.now()<state.frozenUntil) return;
+
+  const expected=word.letters[word.index];
+  if(key===expected){
+    word.boxes[word.index].pf=1;
+    word.boxes[word.index].bounce=1;
+    word.index+=1;
+    keyClack('hit');
+    const c=wordCenter(), boxW=56, gap=12;
+    const totalW=word.letters.length*boxW+(word.letters.length-1)*gap;
+    const startX=c.x-totalW/2;
+    const bx=startX+(word.index-1)*(boxW+gap)+boxW/2;
+    for(let i=0;i<4;i++){
+      const a=Math.random()*Math.PI*2,sp=30+Math.random()*80;
+      bursts.push({x:bx,y:c.y-8,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-30,
+        life:0.3+Math.random()*0.3,ml:0.3+Math.random()*0.3,size:1.5+Math.random()*1.5,type:'gold'});
+    }
+    if(word.index>=word.letters.length) completeWord();
+  } else if(/^[A-ZÇĞİÖŞÜ]$/.test(key)){
+    if (currentMode === 'ACIMASIZ') {
+      gameOver('YANLIŞ TUŞA BASTIN');
+      return;
+    }
+    if (currentMode !== 'SERBEST') {
+      state.combo = 0;
+    }
+    word.boxes[word.index].wf=1;
+    state.shake=0.08;
+    keyClack('wrong');
+    updateHud();
+  }
+});
+
+/* ── Burst particles (subtle, not cute) ── */
+const bursts=[];
+function drawBursts(dt){
+  for(let i=bursts.length-1;i>=0;i--){
+    const b=bursts[i];
+    b.x+=b.vx*dt; b.y+=b.vy*dt; b.vy+=200*dt;
+    b.life-=dt;
+    if(b.life<=0){bursts.splice(i,1);continue;}
+    const a=b.life/b.ml;
+    if(b.type==='gold'){
+      ctx.fillStyle=`rgba(212,168,85,${a*0.7})`;
+    } else {
+      ctx.fillStyle=`rgba(230,220,200,${a*0.5})`;
+    }
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.size*a,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+/* ── Helpers ── */
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+/* ═══════════════════════════════════════════════════════
+   REALISTIC KEYCAP — Manga/sketch style as in the photo
+   ═══════════════════════════════════════════════════════
+   Renders a tall-profile (SA-like) keycap with:
+   - Cream/off-white body with visible sketch-line texture
+   - Gold/amber accent for active key
+   - Charcoal for completed keys  
+   - Proper thick side walls and rounded top
+   - Inner concave dish
+   - Sketch lines on surface (manga art style)
+   ═══════════════════════════════════════════════════════ */
+
+// Color palettes per status
+const KEYCAP_PALETTES = {
+  waiting: {
+    topHi:'#e8e0d4', topLo:'#d5cdc0',
+    wallHi:'#c8c0b2', wallLo:'#a89e90',
+    rimHi:'#f0ebe3', dishShadow:'rgba(0,0,0,0.08)',
+    legend:'#3a3530', legendShadow:'rgba(0,0,0,0.15)',
+    sketchColor:'rgba(80,70,60,0.06)',
+    glow:null
+  },
+  active: {
+    topHi:'#daa54a', topLo:'#c48a30',
+    wallHi:'#b07825', wallLo:'#8a5e1a',
+    rimHi:'#eec470', dishShadow:'rgba(0,0,0,0.12)',
+    legend:'#fff8ee', legendShadow:'rgba(0,0,0,0.25)',
+    sketchColor:'rgba(100,70,20,0.08)',
+    glow:'rgba(212,168,85,0.3)'
+  },
+  done: {
+    topHi:'#4a4540', topLo:'#3a3530',
+    wallHi:'#332e2a', wallLo:'#2a2520',
+    rimHi:'#5a5550', dishShadow:'rgba(0,0,0,0.15)',
+    legend:'#b0a898', legendShadow:'rgba(0,0,0,0.3)',
+    sketchColor:'rgba(200,190,170,0.04)',
+    glow:null
+  },
+  wrong: { // flash overlay values
+    fill:'rgba(196,92,74,',
+    stroke:'rgba(196,92,74,'
+  }
+};
+
+function drawKeycap(cx, cy, w, h, label, status, liftT, wrongFlash, bounce, box){
+  const DEPTH_REST = 10;
+  const DEPTH_PRESS = 2;
+  const currentDepth = DEPTH_REST - (DEPTH_REST-DEPTH_PRESS)*liftT;
+  const r = 6;
+  const bounceOff = Math.sin(bounce*Math.PI)*-8;
+  const pal = KEYCAP_PALETTES[status];
+
+  ctx.save();
+  ctx.translate(cx, cy + bounceOff);
+
+  // ── Shadow ──
+  const shA = 0.3 + 0.15*(1-liftT);
+  ctx.fillStyle=`rgba(0,0,0,${shA*0.4})`;
+  ctx.beginPath(); ctx.ellipse(0,h/2+10,w*0.52,6,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=`rgba(0,0,0,${shA})`;
+  ctx.beginPath(); ctx.ellipse(0,h/2+7,w*0.44,4,0,0,Math.PI*2); ctx.fill();
+
+  const topY = -h/2 - currentDepth;
+
+  // ── Plate (switch housing visible beneath) ──
+  roundRect(-w/2-2, -h/2+2, w+4, h+1, r+2);
+  ctx.fillStyle='#1a1614';
+  ctx.fill();
+
+  // ── Side walls ──
+  const wallH = currentDepth + 3;
+  const wallY = topY + h - 1;
+
+  // Left wall
+  ctx.beginPath();
+  ctx.moveTo(-w/2, wallY+r); ctx.lineTo(-w/2, wallY+wallH);
+  ctx.arcTo(-w/2, wallY+wallH+3, -w/2+r, wallY+wallH+3, 3);
+  ctx.lineTo(w/2-r, wallY+wallH+3);
+  ctx.arcTo(w/2, wallY+wallH+3, w/2, wallY+wallH, 3);
+  ctx.lineTo(w/2, wallY+r);
+  ctx.closePath();
+  let wGrad = ctx.createLinearGradient(0,wallY,0,wallY+wallH);
+  wGrad.addColorStop(0, pal.wallHi);
+  wGrad.addColorStop(1, pal.wallLo);
+  ctx.fillStyle = wGrad;
+  ctx.fill();
+
+  // Wall left edge highlight
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-w/2, wallY, 3, wallH);
+  ctx.clip();
+  ctx.fillStyle='rgba(255,255,255,0.06)';
+  ctx.fillRect(-w/2,wallY,3,wallH);
+  ctx.restore();
+
+  // Wall right edge shadow
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(w/2-3, wallY, 3, wallH);
+  ctx.clip();
+  ctx.fillStyle='rgba(0,0,0,0.08)';
+  ctx.fillRect(w/2-3,wallY,3,wallH);
+  ctx.restore();
+
+  // ── Top face ──
+  roundRect(-w/2, topY, w, h, r);
+  let tGrad = ctx.createLinearGradient(-w/2, topY, w/2, topY+h);
+  tGrad.addColorStop(0, pal.topHi);
+  tGrad.addColorStop(0.5, pal.topHi);
+  tGrad.addColorStop(1, pal.topLo);
+  ctx.fillStyle = tGrad;
+  ctx.fill();
+
+  // ── Outer rim ──
+  ctx.strokeStyle='rgba(255,255,255,0.08)';
+  ctx.lineWidth=0.5;
+  ctx.stroke();
+
+  // ── Glow (active only) ──
+  if(pal.glow){
+    ctx.shadowBlur=16;
+    ctx.shadowColor=pal.glow;
+    roundRect(-w/2,topY,w,h,r);
+    ctx.strokeStyle=pal.glow;
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+
+  // ── Sketch / manga lines on surface ──
+  ctx.save();
+  roundRect(-w/2+1, topY+1, w-2, h-2, r-1);
+  ctx.clip();
+
+  ctx.translate(-w/2, topY);
+
+  ctx.strokeStyle = pal.sketchColor;
+  ctx.lineWidth = 0.8;
+  if(box.sketchPath) ctx.stroke(box.sketchPath);
+
+  ctx.lineWidth = 1.2;
+  if(box.edgePath) ctx.stroke(box.edgePath);
+
+  ctx.restore();
+
+  // ── Concave dish (inner shadow) ──
+  const dp = 4;
+  roundRect(-w/2+dp, topY+dp, w-dp*2, h-dp*2, r-2);
+  let dGrad = ctx.createLinearGradient(0,topY+dp,0,topY+h-dp);
+  dGrad.addColorStop(0, pal.dishShadow);
+  dGrad.addColorStop(0.35, 'rgba(0,0,0,0.01)');
+  dGrad.addColorStop(1, 'rgba(255,255,255,0.03)');
+  ctx.fillStyle = dGrad;
+  ctx.fill();
+
+  // ── Top edge gloss ──
+  ctx.save();
+  roundRect(-w/2+2, topY+1, w-4, Math.max(3, h*0.25), 4);
+  ctx.clip();
+  ctx.fillStyle = `rgba(255,255,255,${status==='active'?0.15:0.08})`;
+  ctx.fillRect(-w/2, topY, w, h*0.25);
+  ctx.restore();
+
+  // ── Bottom edge subtle line ──
+  ctx.save();
+  roundRect(-w/2+3, topY+h-4, w-6, 3, 2);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillRect(-w/2, topY+h-4, w, 3);
+  ctx.restore();
+
+  // ── Wrong flash ──
+  if(wrongFlash>0.02){
+    roundRect(-w/2, topY, w, h, r);
+    ctx.fillStyle=`rgba(196,92,74,${wrongFlash*0.3})`;
+    ctx.fill();
+    ctx.strokeStyle=`rgba(196,92,74,${wrongFlash*0.6})`;
+    ctx.lineWidth=2;
+    ctx.stroke();
+  }
+
+  // ── Legend (letter) ──
+  const fontSize = Math.round(h*0.36);
+  ctx.font = `800 ${fontSize}px 'Inter', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lY = topY + h/2 + 1;
+
+  // Emboss shadow
+  ctx.fillStyle = pal.legendShadow;
+  ctx.fillText(label, 0.5, lY+1.2);
+
+  // Main letter
+  ctx.fillStyle = pal.legend;
+  if(status==='active'){
+    ctx.shadowColor='rgba(255,240,200,0.3)';
+    ctx.shadowBlur=4;
+  }
+  ctx.fillText(label, 0, lY);
+
+  ctx.restore();
+}
+
+/* ── Draw active word ── */
+function drawWord(now, dt){
+  if(!word) return;
+  const c = wordCenter();
+  word.enter = Math.min(1, word.enter + dt*3.5);
+  const eT = easeOutBack(word.enter);
+  const scale = 0.7+0.3*eT;
+
+  ctx.save();
+  ctx.globalAlpha = word.enter;
+  ctx.translate(c.x,c.y);
+  ctx.scale(scale,scale);
+  ctx.translate(-c.x,-c.y);
+
+  // Soft warm light under keys
+  const grd=ctx.createRadialGradient(c.x,c.y+10,0,c.x,c.y+10,160);
+  grd.addColorStop(0,'rgba(212,168,85,0.06)');
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grd;
+  ctx.beginPath();ctx.arc(c.x,c.y+10,160,0,Math.PI*2);ctx.fill();
+
+  const boxW=56, gap=12, boxH=52;
+  const totalW=word.letters.length*boxW+(word.letters.length-1)*gap;
+  const startX=c.x-totalW/2;
+
+  // ── Keyboard case/plate beneath keys ──
+  const extraBottomPad = gameState === 'PLAYING' ? 20 : 0;
+  const caseR = 14;
+  const casePad = 18;
+  const caseX = startX - casePad;
+  const caseY = c.y - boxH/2 - 10 - casePad + 4;
+  const caseW = totalW + casePad*2;
+  const caseH = boxH + 10 + casePad*2 + extraBottomPad;
+
+  // Case shadow
+  ctx.fillStyle='rgba(0,0,0,0.25)';
+  roundRect(caseX+3, caseY+5, caseW, caseH, caseR+2);
+  ctx.fill();
+
+  // Main case body (cream white like in the photo)
+  roundRect(caseX, caseY, caseW, caseH, caseR);
+  let caseGrad = ctx.createLinearGradient(caseX, caseY, caseX, caseY+caseH);
+  caseGrad.addColorStop(0, '#e8e2d8');
+  caseGrad.addColorStop(0.3, '#ddd6ca');
+  caseGrad.addColorStop(1, '#d0c8ba');
+  ctx.fillStyle = caseGrad;
+  ctx.fill();
+
+  // Case border
+  ctx.strokeStyle='rgba(0,0,0,0.08)';
+  ctx.lineWidth=1;
+  ctx.stroke();
+
+  // Case inner shadow (where keys sit)
+  const innerPad = 10;
+  roundRect(caseX+innerPad, caseY+innerPad, caseW-innerPad*2, caseH-innerPad*2-12, 8);
+  ctx.fillStyle='#2a2420';
+  ctx.fill();
+
+  // Inner plate subtle border
+  ctx.strokeStyle='rgba(0,0,0,0.15)';
+  ctx.lineWidth=0.5;
+  ctx.stroke();
+
+  // ── Wood base beneath case ──
+  const woodH = 14;
+  const woodY = caseY + caseH - 4;
+  roundRect(caseX+6, woodY, caseW-12, woodH, 4);
+  let woodGrad = ctx.createLinearGradient(0,woodY,0,woodY+woodH);
+  woodGrad.addColorStop(0,'#6b5440');
+  woodGrad.addColorStop(0.5,'#5a4535');
+  woodGrad.addColorStop(1,'#4a3828');
+  ctx.fillStyle = woodGrad;
+  ctx.fill();
+
+  // Wood grain static lines
+  ctx.save();
+  roundRect(caseX+6, woodY, caseW-12, woodH, 4);
+  ctx.clip();
+  ctx.strokeStyle='rgba(255,255,255,0.04)';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();
+  ctx.moveTo(caseX+10, woodY+4); ctx.lineTo(caseX+caseW-10, woodY+5);
+  ctx.moveTo(caseX+10, woodY+8); ctx.lineTo(caseX+caseW-10, woodY+7);
+  ctx.moveTo(caseX+10, woodY+11); ctx.lineTo(caseX+caseW-10, woodY+12);
+  ctx.stroke();
+  ctx.restore();
+
+  // ── Progress bar (inside case, below keys) ──
+  if (gameState === 'PLAYING' && currentMode !== 'SERBEST') {
+    const elapsed=(now-word.spawnedAt)*state.tempo;
+    const remaining=Math.max(0,1-elapsed/word.duration);
+    const barY=c.y+boxH/2+14;
+    const barW=totalW;
+    const barH=4;
+
+    roundRect(startX, barY, barW, barH, 2);
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.fill();
+
+    if(barW*remaining>0){
+      roundRect(startX, barY, barW*remaining, barH, 2);
+      if(remaining<0.25){
+        ctx.fillStyle='#c45c4a';
+      } else {
+        const bg=ctx.createLinearGradient(startX,0,startX+barW,0);
+        bg.addColorStop(0,'#d4a855');
+        bg.addColorStop(1,'#c48a30');
+        ctx.fillStyle=bg;
+      }
+      ctx.fill();
+      ctx.shadowBlur=4;
+      ctx.shadowColor=remaining<0.25?'rgba(196,92,74,0.4)':'rgba(212,168,85,0.3)';
+      ctx.fill();
+      ctx.shadowBlur=0;
+    }
+  }
+
+  // ── Keycaps ──
+  word.letters.forEach((letter,i)=>{
+    const bx = startX + i*(boxW+gap) + boxW/2;
+    const box = word.boxes[i];
+    box.wf = Math.max(0, box.wf-dt*3);
+    box.pf = Math.max(0, box.pf-dt*5);
+    box.bounce = Math.max(0, box.bounce-dt*4);
+
+    let status='waiting', liftT=0;
+    if(i<word.index){status='done';liftT=0;}
+    else if(i===word.index){status='active';liftT=0.15;}
+    if(i===word.index-1) liftT=Math.max(liftT,box.pf);
+
+    drawKeycap(bx, c.y, boxW, boxH, letter, status, liftT, box.wf, box.bounce, box);
+  });
+
+  ctx.restore();
+}
+
+function easeOutBack(t){
+  const c1=1.70158,c3=c1+1;
+  return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);
+}
+
+/* ── Background ── */
+// Warm dark surface with subtle texture
+function drawBackground(now){
+  if (bgCanvas) {
+    ctx.drawImage(bgCanvas, 0, 0);
+  } else {
+    ctx.fillStyle = '#2c2420';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Warm light cone from above (desk lamp feel)
+  const lamp=ctx.createRadialGradient(CX,CY-100,0,CX,CY-100,350);
+  lamp.addColorStop(0,'rgba(212,168,85,0.04)');
+  lamp.addColorStop(0.5,'rgba(180,140,80,0.02)');
+  lamp.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=lamp;
+  ctx.beginPath();ctx.arc(CX,CY-100,350,0,Math.PI*2);ctx.fill();
+}
+
+function drawGlitch(dt){
+  if(state.glitch>0){
+    ctx.save();
+    ctx.fillStyle=`rgba(196,92,74,${state.glitch*0.06})`;
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+    state.glitch=Math.max(0,state.glitch-dt*2);
+  }
+}
+function updateShake(dt){
+  if(state.shake>0){
+    state.sx=(Math.random()-0.5)*state.shake*8;
+    state.sy=(Math.random()-0.5)*state.shake*8;
+    state.shake=Math.max(0,state.shake-dt*3);
+  } else { state.sx=0;state.sy=0; }
+}
+
+/* ── Infinite Keyboard Background ── */
+let menuPatternCanvas = null;
+let menuPattern = null;
+let menuBgAlpha = 1;
+let menuBgOffset = 0;
+
+function createMenuPattern() {
+  menuPatternCanvas = document.createElement('canvas');
+  const cols = 12;
+  const rows = 12;
+  const boxW = 56, gap = 12, boxH = 52;
+  const tileW = boxW + gap;
+  const tileH = boxH + gap;
+  
+  menuPatternCanvas.width = cols * tileW;
+  menuPatternCanvas.height = rows * tileH;
+  const pctx = menuPatternCanvas.getContext('2d');
+  
+  const originalCtx = ctx;
+  ctx = pctx; // Temporary override
+  
+  ctx.clearRect(0,0, menuPatternCanvas.width, menuPatternCanvas.height);
+  
+  const grid = Array(rows).fill(null).map(() => Array(cols).fill(''));
+  for(let y=0; y<rows; y++){
+    let x=0;
+    while(x < cols) {
+      if (Math.random() > 0.3 && x < cols - 4) {
+        const word = WORD_POOL[Math.floor(Math.random()*WORD_POOL.length)];
+        if (x + word.length <= cols) {
+          for(let i=0; i<word.length; i++) grid[y][x+i] = word[i];
+          x += word.length;
+          continue;
+        }
+      }
+      grid[y][x] = String.fromCharCode(65 + Math.floor(Math.random()*26));
+      x++;
+    }
+  }
+
+  for(let y=0; y<rows; y++) {
+    for(let x=0; x<cols; x++) {
+      const bx = x * tileW + tileW/2;
+      const by = y * tileH + tileH/2;
+      const seed = x * 100 + y * 1000;
+      const box = {
+        sketchPath: generateSketchPath(boxW, boxH, seed),
+        edgePath: generateEdgePath(boxW, boxH, seed)
+      };
+      drawKeycap(bx, by, boxW, boxH, grid[y][x], 'waiting', 0, 0, 0, box);
+    }
+  }
+  
+  ctx = originalCtx;
+  menuPattern = ctx.createPattern(menuPatternCanvas, 'repeat');
+}
+
+function updateAndDrawFallingWords(dt) {
+  if (gameState === 'PLAYING') {
+    menuBgAlpha = Math.max(0, menuBgAlpha - dt * 0.4);
+  } else {
+    menuBgAlpha = Math.min(1, menuBgAlpha + dt * 0.4);
+  }
+  
+  if (menuBgAlpha > 0 && menuPattern) {
+    menuBgOffset += dt * 55; // scroll speed
+    
+    ctx.save();
+    ctx.globalAlpha = menuBgAlpha * 0.25; // overall opacity
+    
+    ctx.translate(CX, CY);
+    ctx.rotate(Math.PI / 8); // Tilt downwards (top-left to bottom-right)
+    
+    const offset = menuBgOffset;
+    ctx.translate(-offset, 0); // flow exactly along the text reading direction
+    
+    ctx.fillStyle = menuPattern;
+    const size = Math.max(W, H) * 1.6;
+    ctx.fillRect(-size + offset, -size, size*2, size*2);
+    
+    ctx.restore();
+  }
+}
+
+/* ── Main Loop ── */
+let lastT=performance.now();
+function loop(now){
+  const isPaused = gameState === 'PAUSED';
+  const dt = isPaused ? 0 : Math.min(0.05,(now-lastT)/1000);
+  lastT=now;
+  const frozen=now<state.frozenUntil;
+  const effectiveNow = isPaused ? pausedAt : now;
+
+  if(!frozen && !isPaused){
+    if(gameState === 'PLAYING'){
+      state.tempo+=(state.targetTempo-state.tempo)*dt*1.5;
+      if(!word&&effectiveNow>=nextSpawnAt) spawnWord();
+      if(word){
+        const elapsed=(effectiveNow-word.spawnedAt)*state.tempo;
+        if(elapsed>=word.duration) {
+          if (currentMode === 'ACIMASIZ') gameOver('SÜRE DOLDU');
+          else missWord('SÜRE DOLDU');
+        }
+      }
+    } else if (gameState === 'MENU') {
+      if(!word) spawnMenuWord();
+    }
+  }
+  updateShake(dt);
+
+  ctx.save();
+  ctx.translate(state.sx,state.sy);
+
+  drawBackground(effectiveNow);
+  updateAndDrawFallingWords(dt);
+  drawWord(effectiveNow, frozen ? 0 : dt);
+  drawBursts(dt);
+  drawGlitch(dt);
+
+  ctx.restore();
+  requestAnimationFrame(loop);
+}
+createMenuPattern();
+requestAnimationFrame(loop);
+updateHud();
+logLine('sahne hazir -- kelimeyi bar bitmeden yaz','hit');
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>KEYBOUND</title>
+<meta name="description" content="Retro mekanik klavye yazma oyunu">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    height:100%; overflow:hidden;
+    font-family:'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  body{ background:#2c2420; }
+  #stage{ position:relative; width:100%; height:100vh; }
+  #stage::after {
+    content: ""; position: absolute; top:0; left:0; right:0; bottom:0; pointer-events: none;
+    background: radial-gradient(circle at center, rgba(0,0,0,0) 35%, rgba(15,10,8,0.65) 85%, rgba(0,0,0,0.9) 100%);
+    z-index: 5;
+  }
+  canvas{ position:absolute; top:0; left:0; display:block; }
+
+  #hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:16px 28px; pointer-events:none; z-index:10;
+  }
+  .hud-box{
+    background: rgba(44,36,32,0.85);
+    backdrop-filter: blur(8px);
+    border:1px solid rgba(255,255,255,0.06);
+    border-radius:8px;
+    padding:7px 16px;
+    color:rgba(210,195,180,0.6);
+    font-size:11px; font-weight:600;
+    letter-spacing:1.8px; text-transform:uppercase;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .hud-box .value{color:#d4a855; margin-left:6px;}
+  .hud-title{
+    color:rgba(210,195,180,0.4);
+    font-size:11px; letter-spacing:3px; font-weight:500;
+    font-family:'JetBrains Mono', monospace;
+  }
+
+  #combo-wrap{
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    pointer-events:none; text-align:center; z-index:10;
+  }
+  #combo{
+    font-size:13px; font-weight:700; letter-spacing:3px;
+    font-family:'JetBrains Mono', monospace;
+    color:#d4a855; text-shadow:0 0 12px rgba(212,168,85,0.3);
+    transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #combo.pop{ transform:scale(1.25); }
+
+  #streak{
+    position:absolute; top:96px; left:50%; transform:translateX(-50%);
+    pointer-events:none; font-size:10px;
+    font-family:'JetBrains Mono', monospace;
+    letter-spacing:2px; font-weight:700;
+    color:#c45c4a; text-shadow:0 0 10px rgba(196,92,74,0.3);
+    opacity:0; transition:opacity 0.3s ease; z-index:10;
+  }
+  #streak.show{opacity:1;}
+
+  #log{
+    position:absolute; bottom:56px; left:28px;
+    color:rgba(210,195,180,0.35); font-size:11px; line-height:1.8;
+    max-height:120px; overflow:hidden; pointer-events:none;
+    font-family:'JetBrains Mono', monospace; z-index:10;
+  }
+  #log div{ opacity:0; animation:logIn 0.25s ease forwards; }
+  @keyframes logIn{
+    from{opacity:0;transform:translateY(6px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+  #log span.hit{color:#8aad7a;}
+  #log span.miss{color:#c45c4a;}
+
+  #footer{
+    position:absolute; bottom:20px; left:0; right:0;
+    text-align:center; font-size:11px;
+    pointer-events:none; font-weight:500;
+    color:rgba(210,195,180,0.25);
+    letter-spacing:1.5px;
+    font-family:'JetBrains Mono', monospace; z-index:10;
+  }
+
+  /* Main Menu UI */
+  #menu-ui{
+    position:absolute; top:25%; left:0; right:0;
     text-align:center; pointer-events:auto; z-index:20;
     transition: opacity 0.4s ease, transform 0.4s ease;
   }
