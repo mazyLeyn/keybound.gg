@@ -85,11 +85,38 @@
     letter-spacing:1.5px;
     font-family:'JetBrains Mono', monospace; z-index:10;
   }
+
+  /* Main Menu UI */
+  #menu-ui{
+    position:absolute; top:25%; left:0; right:0;
+    text-align:center; pointer-events:none; z-index:20;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  #menu-ui h1 {
+    color:#e8e2d8;
+    font-size:48px; letter-spacing:10px;
+    font-weight:900; margin-bottom:16px;
+    text-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  #menu-ui p {
+    color:rgba(210,195,180,0.6);
+    font-size:14px; letter-spacing:4px;
+    font-family:'JetBrains Mono', monospace;
+  }
+  
+  .playing #menu-ui { opacity: 0; transform: translateY(-20px); }
+  
+  #hud, #combo-wrap, #streak, #log, #footer { opacity: 0; transition: opacity 0.5s ease; }
+  .playing #hud, .playing #combo-wrap, .playing #streak, .playing #log, .playing #footer { opacity: 1; }
 </style>
 </head>
 <body>
 <div id="stage">
   <canvas id="c"></canvas>
+  <div id="menu-ui">
+    <h1>KAS HAFIZASI</h1>
+    <p>BAŞLAMAK İÇİN YAZ</p>
+  </div>
   <div id="hud">
     <div class="hud-box"><span class="label">TEMPO</span><span class="value" id="tempo">100%</span></div>
     <div class="hud-title">KAS HAFIZASI</div>
@@ -249,6 +276,8 @@ function playSuccess(){
 }
 
 /* ── State ── */
+let gameState = 'MENU'; // 'MENU' or 'PLAYING'
+
 const state = {
   tempo:1, targetTempo:1, combo:0, maxCombo:0,
   wordsCompleted:0, wordsMissed:0,
@@ -265,6 +294,24 @@ const WORD_POOL = [
 const MS_PER_LETTER = 620;
 let word = null;
 let nextSpawnAt = performance.now()+600;
+
+function spawnMenuWord(){
+  const letters = ['O','Y','N','A'];
+  word = {
+    letters, index:0,
+    spawnedAt:performance.now(),
+    duration:Infinity,
+    boxes:letters.map((_,i)=>{
+      const seed = Math.floor(Math.random()*99999+i*1000);
+      return {
+        wf:0, pf:0, bounce:0, seed,
+        sketchPath: generateSketchPath(56, 52, seed),
+        edgePath: generateEdgePath(56, 52, seed)
+      };
+    }),
+    enter:0
+  };
+}
 
 function spawnWord(){
   const raw = WORD_POOL[Math.floor(Math.random()*WORD_POOL.length)];
@@ -308,10 +355,37 @@ function updateHud(){
     streakEl.textContent=state.combo>=15?'UNSTOPPABLE':state.combo>=10?'ON FIRE':'STREAK x'+state.combo;
   } else streakEl.classList.remove('show');
 }
-function wordCenter(){return{x:CX,y:CY+10};}
+function wordCenter(){
+  if (gameState === 'MENU') return {x:CX, y:CY+40};
+  return {x:CX, y:CY+10};
+}
 
 function completeWord(){
   const c=wordCenter();
+
+  if (gameState === 'MENU') {
+    gameState = 'PLAYING';
+    document.body.classList.add('playing');
+    state.combo=0; state.maxCombo=0;
+    state.wordsCompleted=0; state.wordsMissed=0;
+    state.tempo=1; state.targetTempo=1;
+    updateHud();
+    playSuccess();
+    for(let i=0;i<16;i++){
+      const a=Math.random()*Math.PI*2, sp=80+Math.random()*150;
+      bursts.push({
+        x:c.x, y:c.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-50,
+        life:0.6+Math.random()*0.5, ml:0.6+Math.random()*0.5,
+        size:2.5+Math.random()*2,
+        type: Math.random()>0.5?'gold':'cream'
+      });
+    }
+    logEl.innerHTML='';
+    logLine('OYUN BAŞLADI', 'hit');
+    word=null; nextSpawnAt=performance.now()+500;
+    return;
+  }
+
   state.combo+=1;
   if(state.combo>state.maxCombo) state.maxCombo=state.combo;
   state.wordsCompleted+=1;
@@ -628,12 +702,13 @@ function drawWord(now, dt){
   const startX=c.x-totalW/2;
 
   // ── Keyboard case/plate beneath keys ──
+  const extraBottomPad = gameState === 'PLAYING' ? 20 : 0;
   const caseR = 14;
   const casePad = 18;
   const caseX = startX - casePad;
   const caseY = c.y - boxH/2 - 10 - casePad + 4;
   const caseW = totalW + casePad*2;
-  const caseH = boxH + 10 + casePad*2 + 20;
+  const caseH = boxH + 10 + casePad*2 + extraBottomPad;
 
   // Case shadow
   ctx.fillStyle='rgba(0,0,0,0.25)';
@@ -690,31 +765,33 @@ function drawWord(now, dt){
   ctx.restore();
 
   // ── Progress bar (inside case, below keys) ──
-  const elapsed=(now-word.spawnedAt)*state.tempo;
-  const remaining=Math.max(0,1-elapsed/word.duration);
-  const barY=c.y+boxH/2+14;
-  const barW=totalW;
-  const barH=4;
+  if (gameState === 'PLAYING') {
+    const elapsed=(now-word.spawnedAt)*state.tempo;
+    const remaining=Math.max(0,1-elapsed/word.duration);
+    const barY=c.y+boxH/2+14;
+    const barW=totalW;
+    const barH=4;
 
-  roundRect(startX, barY, barW, barH, 2);
-  ctx.fillStyle='rgba(0,0,0,0.3)';
-  ctx.fill();
+    roundRect(startX, barY, barW, barH, 2);
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.fill();
 
-  if(barW*remaining>0){
-    roundRect(startX, barY, barW*remaining, barH, 2);
-    if(remaining<0.25){
-      ctx.fillStyle='#c45c4a';
-    } else {
-      const bg=ctx.createLinearGradient(startX,0,startX+barW,0);
-      bg.addColorStop(0,'#d4a855');
-      bg.addColorStop(1,'#c48a30');
-      ctx.fillStyle=bg;
+    if(barW*remaining>0){
+      roundRect(startX, barY, barW*remaining, barH, 2);
+      if(remaining<0.25){
+        ctx.fillStyle='#c45c4a';
+      } else {
+        const bg=ctx.createLinearGradient(startX,0,startX+barW,0);
+        bg.addColorStop(0,'#d4a855');
+        bg.addColorStop(1,'#c48a30');
+        ctx.fillStyle=bg;
+      }
+      ctx.fill();
+      ctx.shadowBlur=4;
+      ctx.shadowColor=remaining<0.25?'rgba(196,92,74,0.4)':'rgba(212,168,85,0.3)';
+      ctx.fill();
+      ctx.shadowBlur=0;
     }
-    ctx.fill();
-    ctx.shadowBlur=4;
-    ctx.shadowColor=remaining<0.25?'rgba(196,92,74,0.4)':'rgba(212,168,85,0.3)';
-    ctx.fill();
-    ctx.shadowBlur=0;
   }
 
   // ── Keycaps ──
@@ -785,11 +862,15 @@ function loop(now){
   const frozen=now<state.frozenUntil;
 
   if(!frozen){
-    state.tempo+=(state.targetTempo-state.tempo)*dt*1.5;
-    if(!word&&now>=nextSpawnAt) spawnWord();
-    if(word){
-      const elapsed=(now-word.spawnedAt)*state.tempo;
-      if(elapsed>=word.duration) missWord('sure doldu');
+    if(gameState === 'PLAYING'){
+      state.tempo+=(state.targetTempo-state.tempo)*dt*1.5;
+      if(!word&&now>=nextSpawnAt) spawnWord();
+      if(word){
+        const elapsed=(now-word.spawnedAt)*state.tempo;
+        if(elapsed>=word.duration) missWord('sure doldu');
+      }
+    } else if (gameState === 'MENU') {
+      if(!word) spawnMenuWord();
     }
   }
   updateShake(dt);
