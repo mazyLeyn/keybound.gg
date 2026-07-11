@@ -245,7 +245,16 @@
     font-size:13px; letter-spacing:2px; margin-bottom:26px;
   }
   .store-key-balance span{ color:#e8c76f; font-weight:700; }
-  .store-grid{ display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:720px; margin-bottom:26px; }
+  .store-tabs{ display:flex; gap:10px; margin-bottom:22px; }
+  .store-tab{
+    font-family:'JetBrains Mono', monospace; font-size:12px; font-weight:700;
+    letter-spacing:2px; color:rgba(210,195,180,0.5); padding:9px 20px;
+    border:1px solid rgba(255,255,255,0.1); border-radius:8px; cursor:pointer;
+    background:rgba(255,255,255,0.03); transition: all 0.2s ease;
+  }
+  .store-tab:hover{ color:rgba(210,195,180,0.85); border-color:rgba(255,255,255,0.2); }
+  .store-tab.active{ color:#1a1614; background:#d4a855; border-color:#d4a855; }
+  .store-grid{ display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:760px; margin-bottom:26px; }
   .store-card{
     position:relative; width:150px; padding:22px 16px 16px;
     background: rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
@@ -267,6 +276,13 @@
     animation: rgbSpin 3s linear infinite;
   }
   @keyframes rgbSpin{ from{filter:hue-rotate(0deg);} to{filter:hue-rotate(360deg);} }
+  .mousepad-swatch .store-swatch{
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 5px),
+      repeating-linear-gradient(-45deg, rgba(255,255,255,0.04) 0 2px, transparent 2px 5px),
+      linear-gradient(135deg,#2b2934,#100f14);
+    border:1px dashed rgba(230,196,140,0.45);
+  }
   .store-card h4{ color:#e8e2d8; font-size:13px; letter-spacing:2px; margin-bottom:10px; }
   .store-status{
     font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:1px;
@@ -323,9 +339,14 @@
   <div id="store-ui">
     <h2>MAĞAZA</h2>
     <div class="store-key-balance">SAHİP OLDUĞUN KEY: <span id="store-key-count">0</span></div>
+    <div class="store-tabs">
+      <div class="store-tab active" data-tab="keycap" onclick="switchStoreTab('keycap')">TUŞ TAKIMI</div>
+      <div class="store-tab" data-tab="main" onclick="switchStoreTab('main')">ANA TEMA</div>
+    </div>
     <div class="store-grid" id="store-grid"></div>
     <div class="pause-options">
-      <div class="pause-item"><span class="key">1-4</span> SATIN AL / KUŞAN</div>
+      <div class="pause-item"><span class="key">TAB</span> KATEGORİ DEĞİŞTİR</div>
+      <div class="pause-item"><span class="key">1-6</span> SATIN AL / KUŞAN</div>
       <div class="pause-item"><span class="key">ESC</span> MENÜYE DÖN</div>
     </div>
   </div>
@@ -348,18 +369,35 @@ const canvas = document.getElementById('c');
 let ctx = canvas.getContext('2d');
 let W, H, CX, CY;
 
-let bgCanvas = null;
+let bgCanvas = null;      // aktif oyun ekranı arka planı (tema ne olursa olsun)
+let bgCanvasMenu = null;  // mousepad kuşanılıyken menüde gösterilecek nötr arka plan
 function createBackgroundCache() {
-  bgCanvas = document.createElement('canvas');
-  bgCanvas.width = W;
-  bgCanvas.height = H;
-  const bctx = bgCanvas.getContext('2d');
+  let mt = null;
+  try{ mt = getMainTheme(); }catch(e){}
 
-  // Base gradient
+  if (mt && mt.mousepad) {
+    bgCanvas = document.createElement('canvas');
+    bgCanvas.width = W; bgCanvas.height = H;
+    drawMousepadTexture(bgCanvas.getContext('2d'));
+
+    bgCanvasMenu = document.createElement('canvas');
+    bgCanvasMenu.width = W; bgCanvasMenu.height = H;
+    drawDefaultGradient(bgCanvasMenu.getContext('2d'), ['#352e28','#2c2420','#221c18']);
+    return;
+  }
+
+  bgCanvasMenu = null;
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = W; bgCanvas.height = H;
+  const mtColors = (mt && mt.colors) ? mt.colors : ['#352e28','#2c2420','#221c18'];
+  drawDefaultGradient(bgCanvas.getContext('2d'), mtColors);
+}
+
+function drawDefaultGradient(bctx, mtColors) {
   const bg=bctx.createRadialGradient(CX,CY,0,CX,CY,Math.max(W,H)*0.7);
-  bg.addColorStop(0,'#352e28');
-  bg.addColorStop(0.6,'#2c2420');
-  bg.addColorStop(1,'#221c18');
+  bg.addColorStop(0,mtColors[0]);
+  bg.addColorStop(0.6,mtColors[1]);
+  bg.addColorStop(1,mtColors[2]);
   bctx.fillStyle=bg;
   bctx.fillRect(0,0,W,H);
 
@@ -374,6 +412,127 @@ function createBackgroundCache() {
       bctx.fillRect(x,y,step,step);
     }
   }
+  bctx.restore();
+}
+
+/* ── Mousepad ana teması: siyah zemin üzerinde beyaz topografik kontur çizgileri ── */
+function msHash(ix, iy, seed){
+  let h = (ix*374761393 + iy*668265263 + seed*974521) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return ((h >>> 0) % 100000) / 100000;
+}
+function msSmooth(t){ return t*t*(3-2*t); }
+function msValueNoise(x, y, scale, seed){
+  const gx = x/scale, gy = y/scale;
+  const ix = Math.floor(gx), iy = Math.floor(gy);
+  const fx = gx-ix, fy = gy-iy;
+  const v00 = msHash(ix,iy,seed), v10 = msHash(ix+1,iy,seed);
+  const v01 = msHash(ix,iy+1,seed), v11 = msHash(ix+1,iy+1,seed);
+  const sx = msSmooth(fx), sy = msSmooth(fy);
+  const a = v00 + (v10-v00)*sx;
+  const b = v01 + (v11-v01)*sx;
+  return a + (b-a)*sy;
+}
+function msFbm(x, y, seed){
+  const scales=[150,72,34], amps=[0.55,0.30,0.15];
+  let sum=0, total=0;
+  for(let i=0;i<scales.length;i++){
+    sum += msValueNoise(x,y,scales[i], seed+i*97) * amps[i];
+    total += amps[i];
+  }
+  return sum/total;
+}
+function drawMousepadTexture(bctx) {
+  bctx.fillStyle = '#050505';
+  bctx.fillRect(0,0,W,H);
+
+  const seed = 4242;
+  const cell = 11;
+  const cols = Math.ceil(W/cell)+1;
+  const rows = Math.ceil(H/cell)+1;
+  const grid = new Float32Array(cols*rows);
+  for(let j=0;j<rows;j++){
+    for(let i=0;i<cols;i++){
+      grid[j*cols+i] = msFbm(i*cell, j*cell, seed);
+    }
+  }
+  const val = (i,j) => grid[j*cols+i];
+
+  const levels = [0.30,0.38,0.46,0.54,0.62,0.70];
+  bctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  bctx.lineWidth = 1.3;
+  bctx.lineCap = 'round';
+  bctx.shadowColor = 'rgba(255,255,255,0.35)';
+  bctx.shadowBlur = 1;
+
+  for(const level of levels){
+    bctx.beginPath();
+    for(let j=0;j<rows-1;j++){
+      for(let i=0;i<cols-1;i++){
+        const x0=i*cell, y0=j*cell;
+        const tl=val(i,j), tr=val(i+1,j), br=val(i+1,j+1), bl=val(i,j+1);
+        const cross=[];
+        const lerp=(va,vb)=> (level-va)/(vb-va);
+        if((tl>level)!==(tr>level)) cross.push({e:'top', p:[x0+cell*lerp(tl,tr), y0]});
+        if((tr>level)!==(br>level)) cross.push({e:'right', p:[x0+cell, y0+cell*lerp(tr,br)]});
+        if((bl>level)!==(br>level)) cross.push({e:'bottom', p:[x0+cell*lerp(bl,br), y0+cell]});
+        if((tl>level)!==(bl>level)) cross.push({e:'left', p:[x0, y0+cell*lerp(tl,bl)]});
+
+        if(cross.length===2){
+          bctx.moveTo(cross[0].p[0], cross[0].p[1]);
+          bctx.lineTo(cross[1].p[0], cross[1].p[1]);
+        } else if(cross.length===4){
+          const pt = e => cross.find(c=>c.e===e).p;
+          if(tl>level){
+            bctx.moveTo(...pt('top')); bctx.lineTo(...pt('left'));
+            bctx.moveTo(...pt('right')); bctx.lineTo(...pt('bottom'));
+          } else {
+            bctx.moveTo(...pt('top')); bctx.lineTo(...pt('right'));
+            bctx.moveTo(...pt('left')); bctx.lineTo(...pt('bottom'));
+          }
+        }
+      }
+    }
+    bctx.stroke();
+  }
+  bctx.shadowBlur = 0;
+
+  // Kenarlara doğru hafif kararma (derinlik hissi)
+  const vg = bctx.createRadialGradient(CX,CY,Math.min(W,H)*0.35,CX,CY,Math.max(W,H)*0.72);
+  vg.addColorStop(0,'rgba(0,0,0,0)');
+  vg.addColorStop(1,'rgba(0,0,0,0.35)');
+  bctx.fillStyle=vg;
+  bctx.fillRect(0,0,W,H);
+
+  // ── Mousepad kenar bezeli ──
+  const inset = Math.max(16, Math.min(W,H)*0.028);
+  const r = 22;
+  const bx=inset, by=inset, bw=W-inset*2, bh=H-inset*2;
+  const roundedPath = (x,y,w,h,rad) => {
+    bctx.beginPath();
+    bctx.moveTo(x+rad,y);
+    bctx.arcTo(x+w,y,x+w,y+h,rad);
+    bctx.arcTo(x+w,y+h,x,y+h,rad);
+    bctx.arcTo(x,y+h,x,y,rad);
+    bctx.arcTo(x,y,x+w,y,rad);
+    bctx.closePath();
+  };
+
+  // Kumaş kenarının dışını hafifçe karart
+  bctx.save();
+  roundedPath(0,0,W,H,28);
+  roundedPath(bx,by,bw,bh,r);
+  bctx.fillStyle = 'rgba(0,0,0,0.4)';
+  bctx.fill('evenodd');
+  bctx.restore();
+
+  // Dış gölge çizgisi (kabartma hissi)
+  bctx.save();
+  roundedPath(bx-1.5, by-1.5, bw+3, bh+3, r+2);
+  bctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  bctx.lineWidth = 3;
+  bctx.stroke();
   bctx.restore();
 }
 
@@ -478,7 +637,8 @@ function updateKeyHud(){
 }
 
 /* ── Mağaza / Temalar ── */
-const THEMES = [
+// Kategori 1: Tuş takımı temaları (keycap renkleri)
+const KEYCAP_THEMES = [
   { id:'default', name:'VARSAYILAN', cost:50, palette:null },
   { id:'ocean',   name:'OKYANUS',    cost:50,
     palette:{ topHi:'#5cc6e8', topLo:'#2f96b8', wallHi:'#2878a0', wallLo:'#1c5470',
@@ -503,23 +663,73 @@ let shopState = loadShop();
 function saveShop(){
   try{ localStorage.setItem(SHOP_STORAGE_KEY, JSON.stringify(shopState)); }catch(e){}
 }
-function themeSwatchColors(t){
-  if(t.palette) return [t.palette.topHi, t.palette.topLo];
-  return ['#daa54a','#c48a30']; // varsayılan altın renk
+
+// Kategori 2: Ana tema (oyunun arka plan / sahne rengi)
+const MAIN_THEMES = [
+  { id:'main_default', name:'VARSAYILAN', cost:0,
+    colors:['#352e28','#2c2420','#221c18'], lamp:'212,168,85' },
+  { id:'main_ocean', name:'DERİN OKYANUS', cost:80,
+    colors:['#16323c','#0f242c','#0a181d'], lamp:'92,198,232' },
+  { id:'main_ember', name:'KIZIL ALEV', cost:80,
+    colors:['#3a231c','#2c1a15','#1e120e'], lamp:'196,92,74' },
+  { id:'main_forest', name:'ORMAN', cost:100,
+    colors:['#1e3020','#152318','#0e1810'], lamp:'92,232,146' },
+  { id:'main_mousepad', name:'MOUSEPAD', cost:200, mousepad:true, lamp:'230,196,140' },
+  { id:'main_rgb', name:'RGB', cost:200, animated:true }
+];
+const MAIN_SHOP_STORAGE_KEY = 'keybound_main_shop_v1';
+function loadMainShop(){
+  try{
+    const raw = localStorage.getItem(MAIN_SHOP_STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && Array.isArray(parsed.owned) && parsed.equipped) return parsed;
+    }
+  }catch(e){}
+  return { owned:['main_default'], equipped:'main_default' };
+}
+let mainShopState = loadMainShop();
+function saveMainShop(){
+  try{ localStorage.setItem(MAIN_SHOP_STORAGE_KEY, JSON.stringify(mainShopState)); }catch(e){}
+}
+function applyMainTheme(){
+  if(W>0 && H>0) createBackgroundCache();
+}
+
+let storeTab = 'keycap'; // 'keycap' | 'main'
+function switchStoreTab(tab){
+  if(storeTab === tab) return;
+  storeTab = tab;
+  updateStoreUI();
+}
+
+function themeSwatchColors(t, isKeycap){
+  if(isKeycap){
+    if(t.palette) return [t.palette.topHi, t.palette.topLo];
+    return ['#daa54a','#c48a30']; // varsayılan altın renk
+  }
+  if(t.colors) return [t.colors[0], t.colors[2]];
+  return ['#352e28','#221c18'];
 }
 function updateStoreUI(){
   updateKeyHud();
   const grid = document.getElementById('store-grid');
   if(!grid) return;
-  grid.innerHTML = THEMES.map((t,i)=>{
-    const owned = shopState.owned.includes(t.id);
-    const equipped = shopState.equipped === t.id;
+  document.querySelectorAll('.store-tab').forEach(el=>{
+    el.classList.toggle('active', el.dataset.tab === storeTab);
+  });
+  const isKeycap = storeTab === 'keycap';
+  const list = isKeycap ? KEYCAP_THEMES : MAIN_THEMES;
+  const themeState = isKeycap ? shopState : mainShopState;
+  grid.innerHTML = list.map((t,i)=>{
+    const owned = themeState.owned.includes(t.id);
+    const equipped = themeState.equipped === t.id;
     let statusHtml;
     if(equipped) statusHtml = `<div class="store-status owned">KUŞANILDI</div>`;
     else if(owned) statusHtml = `<div class="store-status owned">KUŞAN</div>`;
     else statusHtml = `<div class="store-status">${t.cost} KEY</div>`;
-    const swatchStyle = t.animated ? '' : `style="background:linear-gradient(135deg, ${themeSwatchColors(t)[0]}, ${themeSwatchColors(t)[1]})"`;
-    return `<div class="store-card${equipped?' equipped':''}${t.animated?' rgb-swatch':''}">
+    const swatchStyle = (t.animated || t.mousepad) ? '' : `style="background:linear-gradient(135deg, ${themeSwatchColors(t,isKeycap)[0]}, ${themeSwatchColors(t,isKeycap)[1]})"`;
+    return `<div class="store-card${equipped?' equipped':''}${t.animated?' rgb-swatch':''}${t.mousepad?' mousepad-swatch':''}">
       <div class="store-key-badge">${i+1}</div>
       <div class="store-swatch" ${swatchStyle}></div>
       <h4>${t.name}</h4>
@@ -528,22 +738,28 @@ function updateStoreUI(){
   }).join('');
 }
 function handleThemeSelect(idx){
-  const t = THEMES[idx];
+  const isKeycap = storeTab === 'keycap';
+  const list = isKeycap ? KEYCAP_THEMES : MAIN_THEMES;
+  const t = list[idx];
   if(!t) return;
-  const owned = shopState.owned.includes(t.id);
+  const themeState = isKeycap ? shopState : mainShopState;
+  const save = isKeycap ? saveShop : saveMainShop;
+  const owned = themeState.owned.includes(t.id);
   if(owned){
-    if(shopState.equipped !== t.id){
-      shopState.equipped = t.id;
-      saveShop();
+    if(themeState.equipped !== t.id){
+      themeState.equipped = t.id;
+      save();
+      if(!isKeycap) applyMainTheme();
       playSuccess();
       logLine(`TEMA KUŞANILDI: ${t.name}`,'hit');
     }
   } else if(playerKeys >= t.cost){
     playerKeys -= t.cost;
     saveKeys();
-    shopState.owned.push(t.id);
-    shopState.equipped = t.id;
-    saveShop();
+    themeState.owned.push(t.id);
+    themeState.equipped = t.id;
+    save();
+    if(!isKeycap) applyMainTheme();
     playSuccess();
     logLine(`SATIN ALINDI: ${t.name}`,'hit');
   } else {
@@ -554,7 +770,7 @@ function handleThemeSelect(idx){
   updateStoreUI();
 }
 function getThemePalette(now){
-  const theme = THEMES.find(t=>t.id===shopState.equipped) || THEMES[0];
+  const theme = KEYCAP_THEMES.find(t=>t.id===shopState.equipped) || KEYCAP_THEMES[0];
   if(theme.id === 'rgb'){
     const hue = (now*0.05) % 360;
     return {
@@ -570,6 +786,9 @@ function getThemePalette(now){
       legend:'#fff8ee', legendShadow:'rgba(0,0,0,0.3)', sketchColor:'rgba(0,0,0,0.08)' };
   }
   return KEYCAP_PALETTES.active;
+}
+function getMainTheme(){
+  return MAIN_THEMES.find(t=>t.id===mainShopState.equipped) || MAIN_THEMES[0];
 }
 
 /* ── Audio ── */
@@ -1177,7 +1396,10 @@ window.addEventListener('keydown',(e)=>{
       document.body.classList.remove('store-active');
       document.getElementById('menu-ui').style.opacity = '1';
       spawnMenuWord(); spawnSettingsMenuWord(); spawnStoreMenuWord();
-    } else if (/^[1-4]$/.test(key)) {
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      switchStoreTab(storeTab === 'keycap' ? 'main' : 'keycap');
+    } else if (/^[1-6]$/.test(key)) {
       handleThemeSelect(parseInt(key,10)-1);
     }
     return;
@@ -1697,17 +1919,46 @@ function easeOutBack(t){
 /* ── Background ── */
 // Warm dark surface with subtle texture
 function drawBackground(now){
-  if (bgCanvas) {
+  let mt = null;
+  try{ mt = getMainTheme(); }catch(e){}
+
+  if (mt && mt.animated) {
+    // RGB ana tema: her karede döngüsel renk
+    const hue = (now*0.03) % 360;
+    const bg=ctx.createRadialGradient(CX,CY,0,CX,CY,Math.max(W,H)*0.7);
+    bg.addColorStop(0,`hsl(${hue},32%,20%)`);
+    bg.addColorStop(0.6,`hsl(${hue},30%,14%)`);
+    bg.addColorStop(1,`hsl(${(hue+15)%360},32%,9%)`);
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,W,H);
+
+    const lamp=ctx.createRadialGradient(CX,CY-100,0,CX,CY-100,350);
+    lamp.addColorStop(0,`hsla(${hue},85%,62%,0.05)`);
+    lamp.addColorStop(0.5,`hsla(${hue},75%,52%,0.025)`);
+    lamp.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=lamp;
+    ctx.beginPath();ctx.arc(CX,CY-100,350,0,Math.PI*2);ctx.fill();
+    return;
+  }
+
+  const inGame = (gameState==='PLAYING' || gameState==='PAUSED' || gameState==='GAMEOVER');
+  const showMousepad = mt && mt.mousepad && inGame;
+  const useMenuFallback = mt && mt.mousepad && !inGame;
+
+  if (useMenuFallback && bgCanvasMenu) {
+    ctx.drawImage(bgCanvasMenu, 0, 0);
+  } else if (bgCanvas) {
     ctx.drawImage(bgCanvas, 0, 0);
   } else {
     ctx.fillStyle = '#2c2420';
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Warm light cone from above (desk lamp feel)
+  // Warm light cone from above (desk lamp feel) -- kuşanılan ana temanın rengiyle
+  const lampRgb = useMenuFallback ? '212,168,85' : ((mt && mt.lamp) ? mt.lamp : '212,168,85');
   const lamp=ctx.createRadialGradient(CX,CY-100,0,CX,CY-100,350);
-  lamp.addColorStop(0,'rgba(212,168,85,0.04)');
-  lamp.addColorStop(0.5,'rgba(180,140,80,0.02)');
+  lamp.addColorStop(0,`rgba(${lampRgb},0.04)`);
+  lamp.addColorStop(0.5,`rgba(${lampRgb},0.02)`);
   lamp.addColorStop(1,'rgba(0,0,0,0)');
   ctx.fillStyle=lamp;
   ctx.beginPath();ctx.arc(CX,CY-100,350,0,Math.PI*2);ctx.fill();
@@ -1879,6 +2130,7 @@ createMenuPattern();
 requestAnimationFrame(loop);
 updateHud();
 updateKeyHud();
+applyMainTheme();
 logLine('sahne hazir -- kelimeyi bar bitmeden yaz','hit');
 </script>
 </body>
