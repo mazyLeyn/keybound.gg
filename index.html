@@ -941,11 +941,11 @@ function roundRect(x,y,w,h,r){
 // Color palettes per status
 const KEYCAP_PALETTES = {
   waiting: {
-    topHi:'#e8e0d4', topLo:'#d5cdc0',
-    wallHi:'#c8c0b2', wallLo:'#a89e90',
-    rimHi:'#f0ebe3', dishShadow:'rgba(0,0,0,0.08)',
-    legend:'#3a3530', legendShadow:'rgba(0,0,0,0.15)',
-    sketchColor:'rgba(80,70,60,0.06)',
+    topHi:'#ece3d2', topLo:'#d9cdb6',
+    wallHi:'#cabb9e', wallLo:'#a8977c',
+    rimHi:'#f5ede0', dishShadow:'rgba(0,0,0,0.08)',
+    legend:'#5a5248', legendShadow:'rgba(0,0,0,0.12)',
+    sketchColor:'rgba(90,75,55,0.07)',
     glow:null
   },
   active: {
@@ -972,100 +972,91 @@ const KEYCAP_PALETTES = {
 
 function drawKeycap(cx, cy, w, h, label, status, liftT, wrongFlash, bounce, box){
   const DEPTH_REST = 10;
-  const DEPTH_PRESS = 2;
+  const DEPTH_PRESS = 3;
   const currentDepth = DEPTH_REST - (DEPTH_REST-DEPTH_PRESS)*liftT;
-  const r = 6;
+  const r = 7;
   const bounceOff = Math.sin(bounce*Math.PI)*-8;
   const pal = KEYCAP_PALETTES[status];
-
-  // Slight "viewed from the left" perspective: the raised top face
-  // leans toward the camera (left) relative to its base, proportional
-  // to how high the cap currently sits.
-  const PERSPECTIVE_X = 0.9;
-  const skewX = -currentDepth * PERSPECTIVE_X;
 
   ctx.save();
   ctx.translate(cx, cy + bounceOff);
 
-  // ── Shadow ──
-  const shA = 0.3 + 0.15*(1-liftT);
-  ctx.fillStyle=`rgba(0,0,0,${shA*0.4})`;
-  ctx.beginPath(); ctx.ellipse(0,h/2+10,w*0.52,6,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle=`rgba(0,0,0,${shA})`;
-  ctx.beginPath(); ctx.ellipse(2,h/2+7,w*0.44,4,0,0,Math.PI*2); ctx.fill();
+  // ── Contact shadow on the plate (single soft, blurred shadow) ──
+  const shA = 0.38 + 0.14*(1-liftT);
+  const shY = h/2 + currentDepth + 5;
+  const shGrad = ctx.createRadialGradient(0, shY, 0, 0, shY, w*0.62);
+  shGrad.addColorStop(0, `rgba(0,0,0,${shA})`);
+  shGrad.addColorStop(0.55, `rgba(0,0,0,${shA*0.4})`);
+  shGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = shGrad;
+  ctx.beginPath(); ctx.ellipse(0, shY, w*0.62, h*0.16, 0, 0, Math.PI*2); ctx.fill();
 
-  const topY = -h/2 - currentDepth;
+  const topY = -h/2 - currentDepth;   // top face position (rises as it lifts)
+  const wallBottom = h/2 + 2;         // fixed footprint on the plate, doesn't move
+  const skewX = -(5 + currentDepth*0.8); // stronger "viewed from the right" side perspective
 
-  // ── Plate (switch housing visible beneath) ──
-  roundRect(-w/2-2, -h/2+2, w+4, h+1, r+2);
-  ctx.fillStyle='#1a1614';
-  ctx.fill();
+  // (switch housing is fully hidden beneath the cap's footprint -- the soft
+  // shadow above is enough to ground the key, no separate hard shape needed)
 
-  // ── Side walls (slanted to match the perspective shift) ──
-  const wallH = currentDepth + 3;
-  const wallY = topY + h - 1;
-
+  // ── Front wall: trapezoid connecting the shifted top face to the fixed footprint ──
+  const wallTop = topY + h - r;
+  const wr = Math.min(r, (wallBottom - wallTop) / 2, 6);
   ctx.beginPath();
-  ctx.moveTo(-w/2+skewX, wallY+r); ctx.lineTo(-w/2, wallY+wallH);
-  ctx.arcTo(-w/2, wallY+wallH+3, -w/2+r, wallY+wallH+3, 3);
-  ctx.lineTo(w/2-r, wallY+wallH+3);
-  ctx.arcTo(w/2, wallY+wallH+3, w/2, wallY+wallH, 3);
-  ctx.lineTo(w/2+skewX, wallY+r);
+  ctx.moveTo(-w/2, wallBottom);
+  ctx.lineTo(-w/2+skewX, wallTop + wr);
+  ctx.arcTo(-w/2+skewX, wallTop, -w/2+skewX+wr, wallTop, wr);
+  ctx.lineTo(w/2+skewX-wr, wallTop);
+  ctx.arcTo(w/2+skewX, wallTop, w/2+skewX, wallTop+wr, wr);
+  ctx.lineTo(w/2, wallBottom);
   ctx.closePath();
-  let wGrad = ctx.createLinearGradient(-w/2,wallY,w/2,wallY+wallH);
-  wGrad.addColorStop(0, pal.wallHi);
-  wGrad.addColorStop(0.55, pal.wallLo);
-  wGrad.addColorStop(1, pal.wallLo);
-  ctx.fillStyle = wGrad;
+  let frontGrad = ctx.createLinearGradient(0, wallTop, 0, wallBottom);
+  frontGrad.addColorStop(0, pal.wallHi);
+  frontGrad.addColorStop(0.35, pal.wallLo);
+  frontGrad.addColorStop(1, pal.wallLo);
+  ctx.fillStyle = frontGrad;
   ctx.fill();
 
-  // ── Left side face -- a real slanted plastic face catching the light ──
+  // Thin side shading -- left edge catches a touch of light, right edge falls into shadow
+  ctx.save();
   ctx.beginPath();
-  ctx.moveTo(-w/2+skewX, topY+2);
-  ctx.lineTo(-w/2+skewX, wallY+r);
-  ctx.lineTo(-w/2, wallY+wallH);
-  ctx.lineTo(-w/2, -h/2+2);
+  ctx.moveTo(-w/2, wallBottom);
+  ctx.lineTo(-w/2+skewX, wallTop + wr);
+  ctx.arcTo(-w/2+skewX, wallTop, -w/2+skewX+wr, wallTop, wr);
+  ctx.lineTo(w/2+skewX-wr, wallTop);
+  ctx.arcTo(w/2+skewX, wallTop, w/2+skewX, wallTop+wr, wr);
+  ctx.lineTo(w/2, wallBottom);
   ctx.closePath();
-  let lFaceGrad = ctx.createLinearGradient(-w/2+skewX,0,-w/2,0);
-  lFaceGrad.addColorStop(0, pal.wallHi);
-  lFaceGrad.addColorStop(1, 'rgba(255,255,255,0.22)');
-  ctx.fillStyle = lFaceGrad;
-  ctx.fill();
+  ctx.clip();
+  let sideShade = ctx.createLinearGradient(-w/2, 0, w/2, 0);
+  sideShade.addColorStop(0, 'rgba(0,0,0,0.30)');
+  sideShade.addColorStop(0.35, 'rgba(0,0,0,0.06)');
+  sideShade.addColorStop(0.7, 'rgba(255,255,255,0.05)');
+  sideShade.addColorStop(1, 'rgba(255,255,255,0.14)');
+  ctx.fillStyle = sideShade;
+  ctx.fillRect(-w/2+skewX, wallTop, w, wallBottom-wallTop);
+  ctx.restore();
 
-  // ── Right side face -- turns away from the viewer, stays in shadow ──
-  ctx.beginPath();
-  ctx.moveTo(w/2+skewX, topY+2);
-  ctx.lineTo(w/2+skewX, wallY+r);
-  ctx.lineTo(w/2, wallY+wallH);
-  ctx.lineTo(w/2, -h/2+2);
-  ctx.closePath();
-  let rFaceGrad = ctx.createLinearGradient(w/2+skewX,0,w/2,0);
-  rFaceGrad.addColorStop(0, pal.wallLo);
-  rFaceGrad.addColorStop(1, 'rgba(0,0,0,0.32)');
-  ctx.fillStyle = rFaceGrad;
-  ctx.fill();
-
-  // Everything above this point belongs to the raised top face, so it
-  // gets shifted sideways -- and very slightly squashed for foreshortening --
-  // together, to sell the perspective.
+  // Everything from here on belongs to the raised top face, so it shifts
+  // sideways together to sell the side perspective.
   ctx.save();
   ctx.translate(skewX, 0);
-  ctx.translate(0, topY+h/2);
-  ctx.scale(1, 0.94);
-  ctx.translate(0, -(topY+h/2));
 
   // ── Top face ──
   roundRect(-w/2, topY, w, h, r);
-  let tGrad = ctx.createLinearGradient(-w/2, topY, w/2, topY+h);
-  tGrad.addColorStop(0, pal.topHi);
-  tGrad.addColorStop(0.5, pal.topHi);
+  let tGrad = ctx.createLinearGradient(0, topY, 0, topY+h);
+  tGrad.addColorStop(0, pal.rimHi);
+  tGrad.addColorStop(0.3, pal.topHi);
   tGrad.addColorStop(1, pal.topLo);
   ctx.fillStyle = tGrad;
   ctx.fill();
 
   // ── Outer rim ──
-  ctx.strokeStyle='rgba(255,255,255,0.08)';
+  ctx.strokeStyle='rgba(255,255,255,0.35)';
+  ctx.lineWidth=0.75;
+  ctx.stroke();
+  ctx.strokeStyle='rgba(0,0,0,0.12)';
   ctx.lineWidth=0.5;
+  roundRect(-w/2, topY, w, h, r);
   ctx.stroke();
 
   // ── Glow (active only) ──
@@ -1083,42 +1074,38 @@ function drawKeycap(cx, cy, w, h, label, status, liftT, wrongFlash, bounce, box)
   ctx.save();
   roundRect(-w/2+1, topY+1, w-2, h-2, r-1);
   ctx.clip();
-
   ctx.translate(-w/2, topY);
-
   ctx.strokeStyle = pal.sketchColor;
   ctx.lineWidth = 0.8;
   if(box.sketchPath) ctx.stroke(box.sketchPath);
-
   ctx.lineWidth = 1.2;
   if(box.edgePath) ctx.stroke(box.edgePath);
-
   ctx.restore();
 
-  // ── Concave dish (inner shadow) ──
-  const dp = 4;
-  roundRect(-w/2+dp, topY+dp, w-dp*2, h-dp*2, r-2);
-  let dGrad = ctx.createLinearGradient(0,topY+dp,0,topY+h-dp);
-  dGrad.addColorStop(0, pal.dishShadow);
-  dGrad.addColorStop(0.35, 'rgba(0,0,0,0.01)');
-  dGrad.addColorStop(1, 'rgba(255,255,255,0.03)');
+  // ── Concave dish (inner shadow, like a real sculpted keycap) ──
+  const dp = 5;
+  roundRect(-w/2+dp, topY+dp, w-dp*2, h-dp*2, r-3);
+  let dGrad = ctx.createRadialGradient(0, topY+h/2, 2, 0, topY+h/2, w*0.55);
+  dGrad.addColorStop(0, 'rgba(255,255,255,0.05)');
+  dGrad.addColorStop(0.6, 'rgba(0,0,0,0.02)');
+  dGrad.addColorStop(1, pal.dishShadow);
   ctx.fillStyle = dGrad;
   ctx.fill();
 
-  // ── Top edge gloss ──
+  // ── Top edge gloss (crisp highlight along the upper rim) ──
   ctx.save();
-  roundRect(-w/2+2, topY+1, w-4, Math.max(3, h*0.25), 4);
+  roundRect(-w/2+2, topY+1.5, w-4, Math.max(2.5, h*0.16), 5);
   ctx.clip();
-  ctx.fillStyle = `rgba(255,255,255,${status==='active'?0.15:0.08})`;
-  ctx.fillRect(-w/2, topY, w, h*0.25);
+  ctx.fillStyle = `rgba(255,255,255,${status==='active'?0.30:0.22})`;
+  ctx.fillRect(-w/2, topY, w, h*0.2);
   ctx.restore();
 
-  // ── Bottom edge subtle line ──
+  // ── Bottom edge subtle shadow line (where dish meets front wall) ──
   ctx.save();
-  roundRect(-w/2+3, topY+h-4, w-6, 3, 2);
+  roundRect(-w/2+3, topY+h-5, w-6, 3.5, 2);
   ctx.clip();
-  ctx.fillStyle = 'rgba(0,0,0,0.05)';
-  ctx.fillRect(-w/2, topY+h-4, w, 3);
+  ctx.fillStyle = 'rgba(0,0,0,0.10)';
+  ctx.fillRect(-w/2, topY+h-5, w, 3.5);
   ctx.restore();
 
   // ── Wrong flash ──
@@ -1132,7 +1119,7 @@ function drawKeycap(cx, cy, w, h, label, status, liftT, wrongFlash, bounce, box)
   }
 
   // ── Legend (letter) ──
-  const fontSize = Math.round(h*0.36);
+  const fontSize = Math.round(h*0.38);
   ctx.font = `800 ${fontSize}px 'Inter', sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -1140,13 +1127,13 @@ function drawKeycap(cx, cy, w, h, label, status, liftT, wrongFlash, bounce, box)
 
   // Emboss shadow
   ctx.fillStyle = pal.legendShadow;
-  ctx.fillText(label, 0.5, lY+1.2);
+  ctx.fillText(label, 0.6, lY+1.4);
 
   // Main letter
   ctx.fillStyle = pal.legend;
   if(status==='active'){
-    ctx.shadowColor='rgba(255,240,200,0.3)';
-    ctx.shadowBlur=4;
+    ctx.shadowColor='rgba(255,240,200,0.35)';
+    ctx.shadowBlur=5;
   }
   ctx.fillText(label, 0, lY);
 
