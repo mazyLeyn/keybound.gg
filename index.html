@@ -166,6 +166,34 @@
     color: rgba(212,168,85,0.75);
   }
 
+  /* Countdown UI (3-2-1) */
+  #countdown-ui {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: center; align-items: center;
+    pointer-events: none; z-index: 26;
+    opacity: 0; transition: opacity 0.25s ease;
+  }
+  .countdown-active #countdown-ui { opacity: 1; }
+  #countdown-num {
+    font-family: 'Inter', sans-serif; font-weight: 900;
+    font-size: 160px; color: #e8e2d8; letter-spacing: 4px;
+    text-shadow: 0 0 40px rgba(212,168,85,0.5), 0 8px 24px rgba(0,0,0,0.6);
+    opacity: 0; transform: scale(0.4);
+  }
+  #countdown-num.tick {
+    animation: countdownPop 0.62s cubic-bezier(0.2,0.9,0.3,1) forwards;
+  }
+  #countdown-num.go {
+    color: #d4a855; font-size: 90px; letter-spacing: 10px;
+  }
+  @keyframes countdownPop {
+    0%   { opacity: 0; transform: scale(0.3); }
+    18%  { opacity: 1; transform: scale(1.12); }
+    32%  { opacity: 1; transform: scale(1); }
+    78%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.5); }
+  }
+
   /* Pause UI */
   #pause-ui {
     position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -319,6 +347,9 @@
       <p>Hata yapmak veya süreyi kaçırmak yasak. Affı yok.</p>
       <div class="mode-record" id="rec-ACIMASIZ"></div>
     </div>
+  </div>
+  <div id="countdown-ui">
+    <div id="countdown-num"></div>
   </div>
   <div id="pause-ui">
     <h2>DURAKLATILDI</h2>
@@ -716,7 +747,9 @@ function loadSpecialShop(){
     const raw = localStorage.getItem(SPECIAL_SHOP_STORAGE_KEY);
     if(raw){
       const parsed = JSON.parse(raw);
-      if(parsed && typeof parsed === 'object') return { equippedKeycap:parsed.equippedKeycap||null, equippedMain:parsed.equippedMain||null };
+      // Not: equippedMain artık kullanılmıyor (MOUSEPAD normal ARKA PLAN
+      // seçeneği oldu) -- eski/kalıntı kayıtlardan etkilenmemek için hep null.
+      if(parsed && typeof parsed === 'object') return { equippedKeycap:parsed.equippedKeycap||null, equippedMain:null };
     }
   }catch(e){}
   return { equippedKeycap:null, equippedMain:null };
@@ -855,8 +888,11 @@ function handleThemeSelect(idx){
   updateStoreUI();
 }
 // Efektif ana tema id'si: KEYBOARD'dan mousepad kuşanılıysa o öncelikli.
+// Ana tema (arka plan) artık sadece ARKA PLAN sekmesindeki seçime göre
+// belirlenir -- MOUSEPAD normal bir arka plan seçeneği olduğu için
+// KEYBOARD/özel katmanın buna karışmasına gerek yok.
 function getEffectiveMainId(){
-  return specialShopState.equippedMain || mainShopState.equipped;
+  return mainShopState.equipped;
 }
 // Kasa (case/board) rengi için: KEYBOARD'dan SİYAH PLASTİK kuşanılıysa o
 // öncelikli, değilse TUŞ TAKIMI sekmesindeki seçime ait kasa renkleri kullanılır.
@@ -1363,9 +1399,44 @@ function missWord(reason){
 }
 
 function startGame(mode) {
+  document.body.classList.remove('mode-select-active');
+  // SERBEST modunda geri sayıma gerek yok, doğrudan başlar.
+  if (mode === 'SERBEST') {
+    beginPlaying(mode);
+    return;
+  }
+  runCountdown(() => beginPlaying(mode));
+}
+
+function runCountdown(onDone){
+  gameState = 'COUNTDOWN';
+  document.body.classList.add('countdown-active');
+  const numEl = document.getElementById('countdown-num');
+  const seq = ['3','2','1','BAŞLA!'];
+  let i = 0;
+  function tick(){
+    numEl.classList.remove('tick','go');
+    void numEl.offsetWidth; // reflow -- animasyonu her adımda sıfırdan başlatmak için
+    numEl.textContent = seq[i];
+    numEl.classList.add('tick');
+    if (seq[i] === 'BAŞLA!') numEl.classList.add('go');
+    keyClack(i < 3 ? 'hit' : 'hit');
+    i++;
+    if (i < seq.length) {
+      setTimeout(tick, 620);
+    } else {
+      setTimeout(() => {
+        document.body.classList.remove('countdown-active');
+        onDone();
+      }, 500);
+    }
+  }
+  tick();
+}
+
+function beginPlaying(mode) {
   currentMode = mode;
   gameState = 'PLAYING';
-  document.body.classList.remove('mode-select-active');
   document.body.classList.add('playing');
   
   state.combo=0; state.maxCombo=0;
@@ -2183,8 +2254,11 @@ function createMenuPattern() {
 }
 
 function updateAndDrawFallingWords(dt) {
-  if (gameState === 'PLAYING') {
-    menuBgAlpha = Math.max(0, menuBgAlpha - dt * 0.4);
+  const inGame = (gameState === 'PLAYING' || gameState === 'COUNTDOWN' || gameState === 'PAUSED' || gameState === 'GAMEOVER');
+  if (inGame) {
+    // Oyun başlar başlamaz anında kapan -- yavaş sönme mousepad gibi
+    // arka planları bozup dikkat dağıtıyordu.
+    menuBgAlpha = 0;
   } else {
     menuBgAlpha = Math.min(1, menuBgAlpha + dt * 0.4);
   }
