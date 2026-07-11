@@ -51,7 +51,7 @@
     pointer-events:none; text-align:center; z-index:10;
   }
   #combo{
-    font-size:13px; font-weight:700; letter-spacing:3px;
+    font-size:19px; font-weight:700; letter-spacing:3px;
     font-family:'JetBrains Mono', monospace;
     color:#d4a855; text-shadow:0 0 12px rgba(212,168,85,0.3);
     transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1);
@@ -59,8 +59,8 @@
   #combo.pop{ transform:scale(1.25); }
 
   #streak{
-    position:absolute; top:96px; left:50%; transform:translateX(-50%);
-    pointer-events:none; font-size:10px;
+    position:absolute; top:104px; left:50%; transform:translateX(-50%);
+    pointer-events:none; font-size:14px;
     font-family:'JetBrains Mono', monospace;
     letter-spacing:2px; font-weight:700;
     color:#c45c4a; text-shadow:0 0 10px rgba(196,92,74,0.3);
@@ -341,7 +341,8 @@
     <div class="store-key-balance">SAHİP OLDUĞUN KEY: <span id="store-key-count">0</span></div>
     <div class="store-tabs">
       <div class="store-tab active" data-tab="keycap" onclick="switchStoreTab('keycap')">TUŞ TAKIMI</div>
-      <div class="store-tab" data-tab="main" onclick="switchStoreTab('main')">ANA TEMA</div>
+      <div class="store-tab" data-tab="main" onclick="switchStoreTab('main')">ARKA PLAN</div>
+      <div class="store-tab" data-tab="special" onclick="switchStoreTab('special')">KEYBOARD</div>
     </div>
     <div class="store-grid" id="store-grid"></div>
     <div class="pause-options">
@@ -639,14 +640,15 @@ function updateKeyHud(){
 /* ── Mağaza / Temalar ── */
 // Kategori 1: Tuş takımı temaları (keycap renkleri)
 const KEYCAP_THEMES = [
-  { id:'default', name:'VARSAYILAN', cost:50, palette:null },
-  { id:'ocean',   name:'OKYANUS',    cost:50,
+  { id:'default', name:'VARSAYILAN', cost:50, palette:null, catType:'keycap' },
+  { id:'ocean',   name:'OKYANUS',    cost:50, catType:'keycap',
     palette:{ topHi:'#5cc6e8', topLo:'#2f96b8', wallHi:'#2878a0', wallLo:'#1c5470',
       rimHi:'#a0e4f5', glow:'rgba(92,198,232,0.35)' } },
-  { id:'emerald', name:'ZÜMRÜT',     cost:100,
+  { id:'emerald', name:'ZÜMRÜT',     cost:100, catType:'keycap',
     palette:{ topHi:'#5ce892', topLo:'#2fb85e', wallHi:'#249850', wallLo:'#1a7038',
       rimHi:'#a0f5c0', glow:'rgba(92,232,146,0.35)' } },
-  { id:'black_plastic', name:'SİYAH PLASTİK', cost:150,
+  { id:'keyboard_default', name:'VARSAYILAN', cost:0, catType:'keycap', special:true, isDefaultToggle:true, palette:null },
+  { id:'black_plastic', name:'SİYAH PLASTİK', cost:150, catType:'keycap', special:true,
     palette:{ topHi:'#8a8a92', topLo:'#68686f', wallHi:'#525258', wallLo:'#3a3a3f',
       rimHi:'#a8a8b0', glow:'rgba(150,150,160,0.3)' },
     restPalette:{ topHi:'#2c2c30', topLo:'#161618', wallHi:'#101012', wallLo:'#050506',
@@ -655,7 +657,7 @@ const KEYCAP_THEMES = [
     caseColors:['#2c2c30','#212124','#141416'],
     baseColors:['#1a1a1d','#131314','#0a0a0b'],
     innerColor:'#0e0e10' },
-  { id:'rgb',     name:'RGB',        cost:200, animated:true, palette:null }
+  { id:'rgb',     name:'RGB',        cost:200, animated:true, palette:null, catType:'keycap' }
 ];
 const SHOP_STORAGE_KEY = 'keybound_shop_v1';
 function loadShop(){
@@ -675,16 +677,16 @@ function saveShop(){
 
 // Kategori 2: Ana tema (oyunun arka plan / sahne rengi)
 const MAIN_THEMES = [
-  { id:'main_default', name:'VARSAYILAN', cost:0,
+  { id:'main_default', name:'VARSAYILAN', cost:0, catType:'main',
     colors:['#352e28','#2c2420','#221c18'], lamp:'212,168,85' },
-  { id:'main_ocean', name:'DERİN OKYANUS', cost:80,
+  { id:'main_ocean', name:'DERİN OKYANUS', cost:80, catType:'main',
     colors:['#16323c','#0f242c','#0a181d'], lamp:'92,198,232' },
-  { id:'main_ember', name:'KIZIL ALEV', cost:80,
+  { id:'main_ember', name:'KIZIL ALEV', cost:80, catType:'main',
     colors:['#3a231c','#2c1a15','#1e120e'], lamp:'196,92,74' },
-  { id:'main_forest', name:'ORMAN', cost:100,
+  { id:'main_forest', name:'ORMAN', cost:100, catType:'main',
     colors:['#1e3020','#152318','#0e1810'], lamp:'92,232,146' },
-  { id:'main_mousepad', name:'MOUSEPAD', cost:200, mousepad:true, lamp:'230,196,140' },
-  { id:'main_rgb', name:'RGB', cost:200, animated:true }
+  { id:'main_mousepad', name:'MOUSEPAD', cost:200, mousepad:true, lamp:'230,196,140', catType:'main' },
+  { id:'main_rgb', name:'RGB', cost:200, animated:true, catType:'main' }
 ];
 const MAIN_SHOP_STORAGE_KEY = 'keybound_main_shop_v1';
 function loadMainShop(){
@@ -705,11 +707,37 @@ function applyMainTheme(){
   if(W>0 && H>0) createBackgroundCache();
 }
 
-let storeTab = 'keycap'; // 'keycap' | 'main'
+// Özel kategori: diğer sekmelerden bağımsız kendi equip durumunu tutar.
+// Böylece tuş takımından RGB seçiliyken özel kategoriden SİYAH PLASTİK de
+// (veya MOUSEPAD) aynı anda etkin kalabilir -- birbirlerini iptal etmezler.
+const SPECIAL_SHOP_STORAGE_KEY = 'keybound_special_shop_v1';
+function loadSpecialShop(){
+  try{
+    const raw = localStorage.getItem(SPECIAL_SHOP_STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && typeof parsed === 'object') return { equippedKeycap:parsed.equippedKeycap||null, equippedMain:parsed.equippedMain||null };
+    }
+  }catch(e){}
+  return { equippedKeycap:null, equippedMain:null };
+}
+let specialShopState = loadSpecialShop();
+function saveSpecialShop(){
+  try{ localStorage.setItem(SPECIAL_SHOP_STORAGE_KEY, JSON.stringify(specialShopState)); }catch(e){}
+}
+
+let storeTab = 'keycap'; // 'keycap' | 'main' | 'special'
+const STORE_TAB_ORDER = ['keycap','main','special'];
 function switchStoreTab(tab){
   if(storeTab === tab) return;
   storeTab = tab;
   updateStoreUI();
+}
+function getStoreList(tab){
+  if(tab === 'keycap') return KEYCAP_THEMES.filter(t=>!t.special);
+  if(tab === 'main') return MAIN_THEMES.filter(t=>!t.special);
+  // 'special' (KEYBOARD): tuş takımı sekmesinden bağımsız, üste katman olarak binen ürünler
+  return KEYCAP_THEMES.filter(t=>t.special);
 }
 
 function themeSwatchColors(t, isKeycap){
@@ -728,12 +756,18 @@ function updateStoreUI(){
   document.querySelectorAll('.store-tab').forEach(el=>{
     el.classList.toggle('active', el.dataset.tab === storeTab);
   });
-  const isKeycap = storeTab === 'keycap';
-  const list = isKeycap ? KEYCAP_THEMES : MAIN_THEMES;
-  const themeState = isKeycap ? shopState : mainShopState;
+  const isSpecialTab = storeTab === 'special';
+  const list = getStoreList(storeTab);
   grid.innerHTML = list.map((t,i)=>{
-    const owned = themeState.owned.includes(t.id);
-    const equipped = themeState.equipped === t.id;
+    const isKeycap = t.catType === 'keycap';
+    const themeState = isKeycap ? shopState : mainShopState;
+    const owned = t.isDefaultToggle ? true : themeState.owned.includes(t.id);
+    // Özel sekmede equip durumu kendi bağımsız slotundan okunur (diğer
+    // sekmelerdeki seçimden etkilenmez); normal sekmelerde her zamanki gibi.
+    let equipped;
+    if(t.isDefaultToggle) equipped = !specialShopState.equippedKeycap;
+    else if(isSpecialTab) equipped = (isKeycap ? specialShopState.equippedKeycap === t.id : specialShopState.equippedMain === t.id);
+    else equipped = themeState.equipped === t.id;
     let statusHtml;
     if(equipped) statusHtml = `<div class="store-status owned">KUŞANILDI</div>`;
     else if(owned) statusHtml = `<div class="store-status owned">KUŞAN</div>`;
@@ -748,13 +782,54 @@ function updateStoreUI(){
   }).join('');
 }
 function handleThemeSelect(idx){
-  const isKeycap = storeTab === 'keycap';
-  const list = isKeycap ? KEYCAP_THEMES : MAIN_THEMES;
+  const list = getStoreList(storeTab);
   const t = list[idx];
   if(!t) return;
+  const isKeycap = t.catType === 'keycap';
   const themeState = isKeycap ? shopState : mainShopState;
   const save = isKeycap ? saveShop : saveMainShop;
-  const owned = themeState.owned.includes(t.id);
+  const owned = t.isDefaultToggle ? true : themeState.owned.includes(t.id);
+  const isSpecialTab = storeTab === 'special';
+  const specialSlot = isKeycap ? 'equippedKeycap' : 'equippedMain';
+
+  if(t.isDefaultToggle){
+    // KEYBOARD sekmesindeki VARSAYILAN: özel katmanı doğrudan kapatır.
+    specialShopState.equippedKeycap = null;
+    saveSpecialShop();
+    playSuccess();
+    logLine(`TEMA KUŞANILDI: ${t.name}`,'hit');
+    updateStoreUI();
+    return;
+  }
+
+  if(isSpecialTab){
+    // Özel kategori: diğer sekmelerdeki seçimi bozmadan kendi bağımsız
+    // slotuna kuşanır; tekrar seçilirse söker (kapatır).
+    if(owned){
+      specialShopState[specialSlot] = (specialShopState[specialSlot] === t.id) ? null : t.id;
+      saveSpecialShop();
+      applyMainTheme();
+      playSuccess();
+      logLine(specialShopState[specialSlot] === t.id ? `TEMA KUŞANILDI: ${t.name}` : `TEMA ÇIKARILDI: ${t.name}`,'hit');
+    } else if(playerKeys >= t.cost){
+      playerKeys -= t.cost;
+      saveKeys();
+      themeState.owned.push(t.id);
+      save();
+      specialShopState[specialSlot] = t.id;
+      saveSpecialShop();
+      applyMainTheme();
+      playSuccess();
+      logLine(`SATIN ALINDI: ${t.name}`,'hit');
+    } else {
+      keyClack('wrong');
+      state.shake = Math.max(state.shake, 0.15);
+      logLine(`YETERSİZ KEY: ${t.name} (${t.cost} gerekli)`,'miss');
+    }
+    updateStoreUI();
+    return;
+  }
+
   if(owned){
     if(themeState.equipped !== t.id){
       themeState.equipped = t.id;
@@ -779,6 +854,18 @@ function handleThemeSelect(idx){
   }
   updateStoreUI();
 }
+// Efektif ana tema id'si: KEYBOARD'dan mousepad kuşanılıysa o öncelikli.
+function getEffectiveMainId(){
+  return specialShopState.equippedMain || mainShopState.equipped;
+}
+// Kasa (case/board) rengi için: KEYBOARD'dan SİYAH PLASTİK kuşanılıysa o
+// öncelikli, değilse TUŞ TAKIMI sekmesindeki seçime ait kasa renkleri kullanılır.
+function getEffectiveKeycapId(){
+  return specialShopState.equippedKeycap || shopState.equipped;
+}
+// Aktif (yazılmakta olan) tuşun rengi HER ZAMAN TUŞ TAKIMI sekmesindeki
+// seçime göre belirlenir (OKYANUS, RGB, vb.) -- KEYBOARD/SİYAH PLASTİK buna
+// karışmaz.
 function getThemePalette(now){
   const theme = KEYCAP_THEMES.find(t=>t.id===shopState.equipped) || KEYCAP_THEMES[0];
   if(theme.id === 'rgb'){
@@ -797,18 +884,25 @@ function getThemePalette(now){
   }
   return KEYCAP_PALETTES.active;
 }
+// Bekleyen (henüz yazılmamış) tuşların rengi: KEYBOARD'dan SİYAH PLASTİK
+// kuşanılıysa -- TUŞ TAKIMI'nda ne seçili olursa olsun -- kasayla senkron
+// koyu/siyah görünür. Kuşanılı değilse TUŞ TAKIMI'ndaki temanın kendi
+// bekleme rengi (varsa) kullanılır.
 function getRestPalette(){
-  const theme = KEYCAP_THEMES.find(t=>t.id===shopState.equipped) || KEYCAP_THEMES[0];
+  const restId = specialShopState.equippedKeycap === 'black_plastic' ? 'black_plastic' : shopState.equipped;
+  const theme = KEYCAP_THEMES.find(t=>t.id===restId) || KEYCAP_THEMES[0];
   if(theme.restPalette){
     return { ...KEYCAP_PALETTES.waiting, ...theme.restPalette };
   }
   return KEYCAP_PALETTES.waiting;
 }
 function getMainTheme(){
-  return MAIN_THEMES.find(t=>t.id===mainShopState.equipped) || MAIN_THEMES[0];
+  return MAIN_THEMES.find(t=>t.id===getEffectiveMainId()) || MAIN_THEMES[0];
 }
 function getCaseTheme(){
-  const theme = KEYCAP_THEMES.find(t=>t.id===shopState.equipped) || KEYCAP_THEMES[0];
+  // Kasa (board) rengi: KEYBOARD'da SİYAH PLASTİK kuşanılıysa o öncelikli,
+  // değilse TUŞ TAKIMI sekmesindeki seçime ait kasa renkleri kullanılır.
+  const theme = KEYCAP_THEMES.find(t=>t.id===getEffectiveKeycapId()) || KEYCAP_THEMES[0];
   return {
     caseColors: theme.caseColors || ['#e8e2d8','#ddd6ca','#d0c8ba'],
     baseColors: theme.baseColors || ['#6b5440','#5a4535','#4a3828'],
@@ -1423,7 +1517,8 @@ window.addEventListener('keydown',(e)=>{
       spawnMenuWord(); spawnSettingsMenuWord(); spawnStoreMenuWord();
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      switchStoreTab(storeTab === 'keycap' ? 'main' : 'keycap');
+      const curIdx = STORE_TAB_ORDER.indexOf(storeTab);
+      switchStoreTab(STORE_TAB_ORDER[(curIdx+1) % STORE_TAB_ORDER.length]);
     } else if (/^[1-6]$/.test(key)) {
       handleThemeSelect(parseInt(key,10)-1);
     }
