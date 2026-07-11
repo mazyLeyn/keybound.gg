@@ -377,10 +377,12 @@ function createBackgroundCache() {
   bctx.restore();
 }
 
+let menuBgDiag = 0; // rotasyonlu deseni kaplamak için gereken minimum yarı-köşegen
 function resize(){
   W = canvas.width = window.innerWidth;
   H = canvas.height = window.innerHeight;
   CX = W/2; CY = H/2;
+  menuBgDiag = 0.5*Math.sqrt(W*W+H*H) + 100; // sadece ekranı kaplayacak kadar, fazlası yok
   if(W > 0 && H > 0) createBackgroundCache();
 }
 window.addEventListener('resize', resize);
@@ -1735,22 +1737,13 @@ let menuBgAlpha = 1;
 let menuBgOffset = 0;
 
 function createMenuPattern() {
-  menuPatternCanvas = document.createElement('canvas');
-  const cols = 12;
-  const rows = 12;
+  const cols = 28; // önceden 12 idi -- kare çok küçüktü ve aynı blok göz önünde tekrarlanıyordu
+  const rows = 16; // büyütülen karo sayesinde tekrar periyodu uzuyor, birleşme yerleri fark edilmiyor
   const boxW = 56, gap = 12, boxH = 52;
   const tileW = boxW + gap;
   const tileH = boxH + gap;
-  
-  menuPatternCanvas.width = cols * tileW;
-  menuPatternCanvas.height = rows * tileH;
-  const pctx = menuPatternCanvas.getContext('2d');
-  
-  const originalCtx = ctx;
-  ctx = pctx; // Temporary override
-  
-  ctx.clearRect(0,0, menuPatternCanvas.width, menuPatternCanvas.height);
-  
+
+  // İçerik matrisini oluştur (harfler / kelimeler)
   const grid = Array(rows).fill(null).map(() => Array(cols).fill(''));
   for(let y=0; y<rows; y++){
     let x=0;
@@ -1768,20 +1761,50 @@ function createMenuPattern() {
     }
   }
 
-  for(let y=0; y<rows; y++) {
-    for(let x=0; x<cols; x++) {
-      const bx = x * tileW + tileW/2;
-      const by = y * tileH + tileH/2;
-      const seed = x * 100 + y * 1000;
+  // Her tuş kapağının kenarlarından biraz taşan bir temas gölgesi var. Karo
+  // tuvalinin en kenarındaki sütun/satırlarda bu taşma komşu hücre olmadığı
+  // için tuval sınırında aniden kesiliyor ve desen tekrarlandığında bu kesim
+  // noktası her defasında aynı yerde belirgin bir çizgi olarak beliriyor.
+  // Çözüm: karoyu, sarmalanmış (wrap-around) komşu hücrelerden 1 hücre payla
+  // (bleed) çizip sonra tam ortadaki cols x rows bölgesini kırpıyoruz --
+  // böylece kenarlar komşu kopyayla birebir örtüşüyor ve birleşme kayboluyor.
+  const bleed = 1;
+  const bigCols = cols + bleed*2;
+  const bigRows = rows + bleed*2;
+  const bleedCanvas = document.createElement('canvas');
+  bleedCanvas.width = bigCols * tileW;
+  bleedCanvas.height = bigRows * tileH;
+  const bctx2 = bleedCanvas.getContext('2d');
+
+  const originalCtx = ctx;
+  ctx = bctx2; // drawKeycap global ctx kullanıyor, geçici olarak yönlendiriyoruz
+
+  ctx.clearRect(0,0, bleedCanvas.width, bleedCanvas.height);
+
+  for(let by=0; by<bigRows; by++){
+    for(let bx=0; bx<bigCols; bx++){
+      const gx = ((bx - bleed) % cols + cols) % cols;
+      const gy = ((by - bleed) % rows + rows) % rows;
+      const cx = bx * tileW + tileW/2;
+      const cy = by * tileH + tileH/2;
+      const seed = gx * 100 + gy * 1000;
       const box = {
         sketchPath: generateSketchPath(boxW, boxH, seed),
         edgePath: generateEdgePath(boxW, boxH, seed)
       };
-      drawKeycap(bx, by, boxW, boxH, grid[y][x], 'waiting', 0, 0, 0, box);
+      drawKeycap(cx, cy, boxW, boxH, grid[gy][gx], 'waiting', 0, 0, 0, box);
     }
   }
-  
+
   ctx = originalCtx;
+
+  // Ortadaki tam cols x rows bölgesini (doğru taşmalarla birlikte) kırp
+  menuPatternCanvas = document.createElement('canvas');
+  menuPatternCanvas.width = cols * tileW;
+  menuPatternCanvas.height = rows * tileH;
+  const finalCtx = menuPatternCanvas.getContext('2d');
+  finalCtx.drawImage(bleedCanvas, bleed*tileW, bleed*tileH, cols*tileW, rows*tileH, 0, 0, cols*tileW, rows*tileH);
+
   menuPattern = ctx.createPattern(menuPatternCanvas, 'repeat');
 }
 
@@ -1805,7 +1828,7 @@ function updateAndDrawFallingWords(dt) {
     ctx.translate(-offset, 0); // flow exactly along the text reading direction
     
     ctx.fillStyle = menuPattern;
-    const size = Math.max(W, H) * 1.6;
+    const size = menuBgDiag;
     ctx.fillRect(-size + offset, -size, size*2, size*2);
     
     ctx.restore();
