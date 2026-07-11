@@ -110,6 +110,31 @@
   }
   
   .playing #menu-ui { opacity: 0; transform: translateY(-20px); }
+
+  /* Session Summary */
+  .summary-stats{
+    display:flex; gap:14px; justify-content:center; margin-top:22px;
+    pointer-events:none; flex-wrap:wrap; padding:0 20px;
+  }
+  .stat-card{
+    background: rgba(26,20,18,0.6); border:1px solid rgba(255,255,255,0.06);
+    border-radius:10px; padding:12px 18px; min-width:92px;
+    backdrop-filter: blur(6px);
+  }
+  .stat-card .stat-label{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:1.5px;
+    color:rgba(210,195,180,0.45); text-transform:uppercase;
+  }
+  .stat-card .stat-val{
+    font-family:'JetBrains Mono', monospace; font-size:22px; font-weight:700;
+    color:#e8e2d8; margin-top:4px;
+  }
+  .stat-card.is-record{ border-color:rgba(212,168,85,0.5); box-shadow:0 0 16px rgba(212,168,85,0.15); }
+  .stat-card.is-record .stat-val{ color:#d4a855; }
+  .stat-card .stat-badge{
+    font-family:'JetBrains Mono', monospace; font-size:8.5px; letter-spacing:1px;
+    color:#d4a855; margin-top:3px; opacity:0.9;
+  }
   
   /* Mode Select UI */
   #mode-select-ui {
@@ -135,6 +160,11 @@
   }
   .mode-card h3 { color: #d4a855; margin-bottom: 15px; font-size: 22px; letter-spacing: 3px;}
   .mode-card p { color: rgba(210,195,180,0.6); font-size: 13px; line-height: 1.6; font-family:'JetBrains Mono', monospace;}
+  .mode-card .mode-record {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06);
+    font-family:'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1px;
+    color: rgba(212,168,85,0.75);
+  }
 
   /* Pause UI */
   #pause-ui {
@@ -200,16 +230,19 @@
       <div class="mode-key">S</div>
       <h3>SERBEST</h3>
       <p>Yanma yok, süre yok. Sadece rahatla ve yaz.</p>
+      <div class="mode-record" id="rec-SERBEST"></div>
     </div>
     <div class="mode-card">
       <div class="mode-key">N</div>
       <h3>NORMAL</h3>
       <p>Süreye karşı yarış. Hata yaparsan kombon sıfırlanır.</p>
+      <div class="mode-record" id="rec-NORMAL"></div>
     </div>
     <div class="mode-card">
       <div class="mode-key">A</div>
       <h3>ACIMASIZ</h3>
       <p>Hata yapmak veya süreyi kaçırmak yasak. Affı yok.</p>
+      <div class="mode-record" id="rec-ACIMASIZ"></div>
     </div>
   </div>
   <div id="pause-ui">
@@ -551,15 +584,77 @@ const state = {
   tempo:1, targetTempo:1, combo:0, maxCombo:0,
   wordsCompleted:0, wordsMissed:0,
   glitch:0, frozenUntil:0,
-  shake:0, sx:0, sy:0
+  shake:0, sx:0, sy:0,
+  startedAt:0
 };
+
+/* ── Kişisel rekorlar (localStorage) ── */
+const RECORDS_KEY = 'keybound_records_v1';
+function loadRecords(){
+  try{
+    const raw = localStorage.getItem(RECORDS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {};
+}
+function getModeRecord(mode){
+  const all = loadRecords();
+  return all[mode] || { bestWords:0, bestCombo:0, bestAcc:0, bestWpm:0 };
+}
+// Kaydeder ve hangi alanların yeni rekor olduğunu döndürür
+function saveModeRecord(mode, stats){
+  const all = loadRecords();
+  const prev = all[mode] || { bestWords:0, bestCombo:0, bestAcc:0, bestWpm:0 };
+  const isNew = {
+    words: stats.words > prev.bestWords,
+    combo: stats.combo > prev.bestCombo,
+    acc: stats.acc > prev.bestAcc && stats.words >= 5, // anlamlı olsun diye min 5 kelime
+    wpm: stats.wpm > prev.bestWpm && stats.words >= 5
+  };
+  const updated = {
+    bestWords: Math.max(prev.bestWords, stats.words),
+    bestCombo: Math.max(prev.bestCombo, stats.combo),
+    bestAcc: Math.max(prev.bestAcc, isNew.acc ? stats.acc : prev.bestAcc),
+    bestWpm: Math.max(prev.bestWpm, isNew.wpm ? stats.wpm : prev.bestWpm)
+  };
+  all[mode] = updated;
+  try{ localStorage.setItem(RECORDS_KEY, JSON.stringify(all)); }catch(e){}
+  return isNew;
+}
+function computeSessionStats(){
+  const words = state.wordsCompleted;
+  const missed = state.wordsMissed;
+  const total = words+missed;
+  const acc = total ? Math.round((words/total)*100) : 0;
+  const elapsedMin = state.startedAt ? (performance.now()-state.startedAt)/60000 : 0;
+  const wpm = elapsedMin>0.05 ? Math.round(words/elapsedMin) : 0;
+  return { words, missed, acc, combo: state.maxCombo, wpm };
+}
 
 /* ── Words ── */
 const WORD_POOL = [
   'SES','YOL','ANI','TON','GÜÇ','HIZ','KAÇ','TUŞ','SIR','AŞK','GÖZ','KOL','ISI','ZİL','TAŞ','KUM','SAZ','KOD','BAĞ','ÇİP','FON','HİS','KAN','KAS','KÖK','NOT','OKU','PİL','RUH','SAF','YAZ','ZOR',
   'ATEŞ','IŞIK','ODAK','AKIŞ','NOTA','RÜYA','TREN','KAPI','ÇARK','UYUM','DOKU','SIRT','İVME','DOLU','KATI','SIVI','AĞIR','AKIM','ALAN','ARAÇ','BANT','BLOK','DATA','ESER','FORM','HARF','HATA','KARE','KASA','KLAN','KURS','LİNK','MOLA','NORM','ONAY','OYUN','ÖYKÜ','PLAN','PUAN','RİSK','SAYI','SKOR','TEST','VERİ','YAPI',
   'RİTİM','DENGE','ZAMAN','NABIZ','GÜNEŞ','BULUT','ÇEVİK','TEMPO','NEFES','YÜZEY','DALGA','DUMAN','GÖLGE','KİLİT','DÜĞÜM','ÇİZGİ','PARÇA','AKORT','EKRAN','KABLO','DÜZEN','ANLAM','YANKI','DÖNGÜ','HAFİF','VURUŞ','AHENK','AKTİF','ARŞİV','BİÇİM','CEVAP','CİHAZ','ÇÖZÜM','DEĞER','DETAY','DİKEY','DOĞRU','DOSYA','EFEKT','FİKİR','FOKUS','GİRİŞ','GÖRÜŞ','GURUR','HACİM','HEDEF','HESAP','HÜCRE','İŞLEM','KAYIT','KURAL','MANTIK','METİN','MÜZİK','NESNE','ORTAM','PANEL','PROJE','ROBOT','SANAT','SINIR','SİLAH','TABLO','TEMA','TEORİ','UZMAN','ÜNİTE','VİDEO','YATAY','YAYIN','YORUM','ZEMİN',
-  'BAŞARI','BELLEK','BOŞLUK','DİKKAT','EFSANE','ENERJİ','KLAVYE','KUVVET','MİKTAR','SİSTEM','SÜRÜCÜ','ŞİDDET','YAZILIM','GELİŞİM','BİLİŞİM','TEKNİK','GÜNCEL','SÖZCÜK','YÖNTEM','HAREKET','AŞAĞI','YUKARI','SESSİZ','GÖRÜNTÜ'
+  'BAŞARI','BELLEK','BOŞLUK','DİKKAT','EFSANE','ENERJİ','KLAVYE','KUVVET','MİKTAR','SİSTEM','SÜRÜCÜ','ŞİDDET','YAZILIM','GELİŞİM','BİLİŞİM','TEKNİK','GÜNCEL','SÖZCÜK','YÖNTEM','HAREKET','AŞAĞI','YUKARI','SESSİZ','GÖRÜNTÜ',
+
+  // Gündelik eşyalar
+  'ÇAY','RAF','FARE','MASA','HALI','SAAT','ŞARJ','ÇANTA','DOLAP','PERDE','KALEM','SİLGİ','YASTIK','KOLTUK','CÜZDAN','DEFTER','CETVEL','ANAHTAR','ŞEMSİYE','GÖZLÜK','SANDALYE','AYAKKABI',
+
+  // Elektronik / teknoloji
+  'TELEFON','KULAKLIK','KAMERA','YAZICI','MODEM','MİKROFON','HOPARLÖR','PİKSEL','SENSÖR','UYGULAMA',
+
+  // Yiyecek-içecek
+  'BAL','SÜT','MUZ','ELMA','KAHVE','EKMEK','TABAK','ÇATAL','KAŞIK','BIÇAK','FIRIN','MUTFAK','PEYNİR','ZEYTİN','BARDAK','TENCERE','ÇİKOLATA',
+
+  // Vücut
+  'DİZ','SAÇ','KAŞ','OMUZ','AYAK','BURUN','DUDAK','BİLEK','KULAK','PARMAK','DİRSEK','KİRPİK',
+
+  // Doğa
+  'DAĞ','KAR','DENİZ','ORMAN','NEHİR','YAPRAK','ÇİÇEK','TOPRAK','YILDIZ','YAĞMUR','RÜZGAR','GÖKYÜZÜ',
+
+  // Duygular
+  'ÖFKE','NEŞE','UMUT','MUTLU','SEVGİ','SAKİN','KORKU','HUZUR','ÜZGÜN','HEYECAN'
 ];
 const MS_PER_LETTER = 620;
 let word = null;
@@ -661,6 +756,7 @@ function completeWord(){
     document.getElementById('menu-ui').style.opacity = '0';
     playSuccess();
     word=null; settingsWord=null;
+    updateModeRecordsUI();
     return;
   }
 
@@ -711,6 +807,7 @@ function startGame(mode) {
   state.combo=0; state.maxCombo=0;
   state.wordsCompleted=0; state.wordsMissed=0;
   state.tempo=1; state.targetTempo=1;
+  state.startedAt=performance.now();
   updateHud();
   playSuccess();
   
@@ -729,18 +826,60 @@ function startGame(mode) {
   word=null; nextSpawnAt=performance.now()+500;
 }
 
-function gameOver(reason) {
+function updateModeRecordsUI(){
+  ['SERBEST','NORMAL','ACIMASIZ'].forEach(mode=>{
+    const r = getModeRecord(mode);
+    const el = document.getElementById('rec-'+mode);
+    if(!el) return;
+    if(r.bestWords===0){
+      el.textContent = 'Henüz kayıt yok';
+    } else if(mode==='SERBEST'){
+      el.textContent = `EN İYİ: ${r.bestWords} kelime`;
+    } else {
+      el.textContent = `EN İYİ: ${r.bestCombo} kombo · ${r.bestWords} kelime`;
+    }
+  });
+}
+
+function statCardHtml(label, val, isRecord){
+  return `<div class="stat-card${isRecord?' is-record':''}">
+    <div class="stat-label">${label}</div>
+    <div class="stat-val">${val}</div>
+    ${isRecord?'<div class="stat-badge">★ YENİ REKOR</div>':''}
+  </div>`;
+}
+
+function showSessionSummary(reason, isFail){
+  const stats = computeSessionStats();
+  const isNew = saveModeRecord(currentMode, stats);
+  const anyRecord = isNew.words||isNew.combo||isNew.acc||isNew.wpm;
+
   gameState = 'GAMEOVER';
   word = null;
   document.body.classList.remove('playing');
   document.body.classList.add('game-over');
-  document.getElementById('menu-ui').style.opacity = '1';
-  document.getElementById('menu-ui').innerHTML = `
-    <h1 style="color:#c45c4a; font-size:40px;">OYUN BİTTİ</h1>
-    <p style="font-size:16px;">${reason}</p>
+
+  const titleColor = isFail ? '#c45c4a' : '#e8e2d8';
+  const title = isFail ? 'OYUN BİTTİ' : 'OTURUM TAMAMLANDI';
+
+  const menuUi = document.getElementById('menu-ui');
+  menuUi.style.opacity = '1';
+  menuUi.innerHTML = `
+    <h1 style="color:${titleColor}; font-size:36px; letter-spacing:6px;">${title}</h1>
+    <p style="font-size:13px;">${reason || ''}${anyRecord ? '  —  YENİ REKOR KIRDIN!' : ''}</p>
+    <div class="summary-stats">
+      ${statCardHtml('KELİME', stats.words, isNew.words)}
+      ${statCardHtml('KOMBO', stats.combo, isNew.combo)}
+      ${statCardHtml('İSABET', stats.acc+'%', isNew.acc)}
+      ${statCardHtml('DK/KEL', stats.wpm, isNew.wpm)}
+    </div>
     <p style="margin-top:24px; color:#d4a855; font-size:12px; letter-spacing:2px;">MENÜYE DÖNMEK İÇİN <span style="color:#fff; font-weight:800; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px;">SPACE</span> BAS</p>
   `;
-  logLine(`OYUN BİTTİ: ${reason}`, 'miss');
+  logLine(`${title}: ${reason||''}`, isFail?'miss':'hit');
+}
+
+function gameOver(reason) {
+  showSessionSummary(reason, true);
 }
 
 window.addEventListener('keydown',(e)=>{
@@ -766,8 +905,13 @@ window.addEventListener('keydown',(e)=>{
 
   if (gameState === 'PAUSED') {
     if (key === 'Q') {
-      gameState = 'MENU';
       document.body.classList.remove('paused');
+      const hasProgress = (state.wordsCompleted + state.wordsMissed) > 0;
+      if (hasProgress) {
+        showSessionSummary('OTURUM ÖZETİ', false);
+        return;
+      }
+      gameState = 'MENU';
       document.body.classList.remove('playing');
       document.getElementById('menu-ui').style.opacity = '1';
       document.getElementById('menu-ui').innerHTML = `
