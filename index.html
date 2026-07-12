@@ -494,7 +494,7 @@ const I18N = {
     done:'TAMAM', missed:'KAÇTI', timeUp:'SÜRE DOLDU',
     gameOverTitle:'OYUN BİTTİ', sessionDoneTitle:'OTURUM TAMAMLANDI', newRecordSuffix:'YENİ REKOR KIRDIN!',
     statWords:'KELİME', statCombo:'KOMBO', statAcc:'İSABET', statWpm:'DK/KEL', newRecordBadge:'★ YENİ REKOR',
-    backToMenuPrefix:'MENÜYE DÖNMEK İÇİN', backToMenuSuffix:'BAS',
+    backToMenuPrefix:'MENÜYE DÖNMEK İÇİN', backToMenuSuffix:'BAS', retryHint:'TEKRAR DENE',
     sceneReady:'sahne hazir -- kelimeyi bar bitmeden yaz',
     sessionSummaryReason:'OTURUM ÖZETİ',
     themeNames: {
@@ -534,7 +534,7 @@ const I18N = {
     done:'DONE', missed:'MISSED', timeUp:'TIME UP',
     gameOverTitle:'GAME OVER', sessionDoneTitle:'SESSION COMPLETE', newRecordSuffix:'NEW RECORD!',
     statWords:'WORDS', statCombo:'COMBO', statAcc:'ACCURACY', statWpm:'WPM', newRecordBadge:'★ NEW RECORD',
-    backToMenuPrefix:'PRESS', backToMenuSuffix:'TO RETURN TO MENU',
+    backToMenuPrefix:'PRESS', backToMenuSuffix:'TO RETURN TO MENU', retryHint:'TO RETRY',
     sceneReady:'scene ready -- type the word before the bar runs out',
     sessionSummaryReason:'SESSION SUMMARY',
     themeNames: {
@@ -1587,6 +1587,7 @@ function startMusic(){
 /* ── State ── */
 let gameState = 'MENU';
 let currentMode = 'NORMAL';
+let lastGameOverWasFail = false;
 let pausedAt = 0;
 
 const state = {
@@ -1956,6 +1957,7 @@ function showSessionSummary(reason, isFail){
   const anyRecord = isNew.words||isNew.combo||isNew.acc||isNew.wpm;
 
   gameState = 'GAMEOVER';
+  lastGameOverWasFail = isFail;
   word = null;
   document.body.classList.remove('playing');
   document.body.classList.add('game-over');
@@ -1974,7 +1976,7 @@ function showSessionSummary(reason, isFail){
       ${statCardHtml(t().statAcc, stats.acc+'%', isNew.acc)}
       ${statCardHtml(t().statWpm, stats.wpm, isNew.wpm)}
     </div>
-    <p style="margin-top:24px; color:#d4a855; font-size:12px; letter-spacing:2px;">${t().backToMenuPrefix} <span style="color:#fff; font-weight:800; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px;">SPACE</span> ${t().backToMenuSuffix}</p>
+    <p style="margin-top:24px; color:#d4a855; font-size:12px; letter-spacing:2px;"><span style="color:#fff; font-weight:800; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px;">Q</span> ${t().backToMenuSuffix}   /   <span style="color:#fff; font-weight:800; background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px;">SPACE</span> ${t().retryHint}</p>
   `;
   logLine(`${title}: ${reason||''}`, isFail?'miss':'hit');
 }
@@ -2074,7 +2076,7 @@ window.addEventListener('keydown',(e)=>{
   }
   
   if (gameState === 'GAMEOVER') {
-    if (e.code === 'Space') {
+    const goToMenu = () => {
       gameState = 'MENU';
       document.body.classList.remove('game-over');
       document.getElementById('menu-ui').innerHTML = `
@@ -2084,6 +2086,13 @@ window.addEventListener('keydown',(e)=>{
       `;
       updateKeyHud();
       spawnMenuWord(); spawnSettingsMenuWord(); spawnStoreMenuWord();
+    };
+    if (key === 'Q') {
+      goToMenu();
+    } else if (e.code === 'Space') {
+      document.body.classList.remove('game-over');
+      document.getElementById('menu-ui').style.opacity = '0';
+      startGame(currentMode);
     }
     return;
   }
