@@ -488,6 +488,7 @@ const I18N = {
     hudTempo:'TEMPO', hudKey:'KEY', hudAcc:'ACC',
     footerHint:'kelimeyi bar bitmeden yaz',
     modStarting:'BAŞLIYOR',
+    countdownGo:'BAŞLA!',
     noRecord:'Henüz kayıt yok', best:'EN İYİ', wordsUnit:'kelime', comboUnit:'kombo',
     done:'TAMAM', missed:'KAÇTI', timeUp:'SÜRE DOLDU',
     gameOverTitle:'OYUN BİTTİ', sessionDoneTitle:'OTURUM TAMAMLANDI', newRecordSuffix:'YENİ REKOR KIRDIN!',
@@ -499,7 +500,7 @@ const I18N = {
       default:'VARSAYILAN', ocean:'OKYANUS', emerald:'ZÜMRÜT', keyboard_default:'VARSAYILAN',
       black_plastic:'SİYAH PLASTİK', rgb:'RGB',
       main_default:'VARSAYILAN', main_ocean:'DERİN OKYANUS', main_ember:'KIZIL ALEV',
-      main_forest:'ORMAN', main_mousepad:'MOUSEPAD', main_rgb:'RGB'
+      main_forest:'ORMAN', main_mousepad:'MOUSEPAD KARSTİK', main_mousepad_ocean:'MOUSEPAD OKYANUS', main_rgb:'RGB'
     }
   },
   en: {
@@ -527,6 +528,7 @@ const I18N = {
     hudTempo:'TEMPO', hudKey:'KEY', hudAcc:'ACC',
     footerHint:'type the word before the bar runs out',
     modStarting:'STARTING',
+    countdownGo:'GO!',
     noRecord:'No record yet', best:'BEST', wordsUnit:'words', comboUnit:'combo',
     done:'DONE', missed:'MISSED', timeUp:'TIME UP',
     gameOverTitle:'GAME OVER', sessionDoneTitle:'SESSION COMPLETE', newRecordSuffix:'NEW RECORD!',
@@ -538,7 +540,7 @@ const I18N = {
       default:'DEFAULT', ocean:'OCEAN', emerald:'EMERALD', keyboard_default:'DEFAULT',
       black_plastic:'BLACK PLASTIC', rgb:'RGB',
       main_default:'DEFAULT', main_ocean:'DEEP OCEAN', main_ember:'CRIMSON FLAME',
-      main_forest:'FOREST', main_mousepad:'MOUSEPAD', main_rgb:'RGB'
+      main_forest:'FOREST', main_mousepad:'MOUSEPAD KARST', main_mousepad_ocean:'MOUSEPAD OCEAN', main_rgb:'RGB'
     }
   }
 };
@@ -595,7 +597,11 @@ function createBackgroundCache() {
   if (mt && mt.mousepad) {
     bgCanvas = document.createElement('canvas');
     bgCanvas.width = W; bgCanvas.height = H;
-    drawMousepadTexture(bgCanvas.getContext('2d'));
+    if (mt.mousepadStyle === 'ocean') {
+      drawMousepadTextureOcean(bgCanvas.getContext('2d'));
+    } else {
+      drawMousepadTexture(bgCanvas.getContext('2d'));
+    }
 
     bgCanvasMenu = document.createElement('canvas');
     bgCanvasMenu.width = W; bgCanvasMenu.height = H;
@@ -661,9 +667,6 @@ function msFbm(x, y, seed){
   return sum/total;
 }
 function drawMousepadTexture(bctx) {
-  bctx.fillStyle = '#050505';
-  bctx.fillRect(0,0,W,H);
-
   const seed = 4242;
   const cell = 11;
   const cols = Math.ceil(W/cell)+1;
@@ -676,53 +679,21 @@ function drawMousepadTexture(bctx) {
   }
   const val = (i,j) => grid[j*cols+i];
 
-  const levels = [0.30,0.38,0.46,0.54,0.62,0.70];
-  bctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  bctx.lineWidth = 1.3;
-  bctx.lineCap = 'round';
-  bctx.shadowColor = 'rgba(255,255,255,0.35)';
-  bctx.shadowBlur = 1;
-
-  for(const level of levels){
-    bctx.beginPath();
-    for(let j=0;j<rows-1;j++){
-      for(let i=0;i<cols-1;i++){
-        const x0=i*cell, y0=j*cell;
-        const tl=val(i,j), tr=val(i+1,j), br=val(i+1,j+1), bl=val(i,j+1);
-        const cross=[];
-        const lerp=(va,vb)=> (level-va)/(vb-va);
-        if((tl>level)!==(tr>level)) cross.push({e:'top', p:[x0+cell*lerp(tl,tr), y0]});
-        if((tr>level)!==(br>level)) cross.push({e:'right', p:[x0+cell, y0+cell*lerp(tr,br)]});
-        if((bl>level)!==(br>level)) cross.push({e:'bottom', p:[x0+cell*lerp(bl,br), y0+cell]});
-        if((tl>level)!==(bl>level)) cross.push({e:'left', p:[x0, y0+cell*lerp(tl,bl)]});
-
-        if(cross.length===2){
-          bctx.moveTo(cross[0].p[0], cross[0].p[1]);
-          bctx.lineTo(cross[1].p[0], cross[1].p[1]);
-        } else if(cross.length===4){
-          const pt = e => cross.find(c=>c.e===e).p;
-          if(tl>level){
-            bctx.moveTo(...pt('top')); bctx.lineTo(...pt('left'));
-            bctx.moveTo(...pt('right')); bctx.lineTo(...pt('bottom'));
-          } else {
-            bctx.moveTo(...pt('top')); bctx.lineTo(...pt('right'));
-            bctx.moveTo(...pt('left')); bctx.lineTo(...pt('bottom'));
-          }
-        }
-      }
-    }
-    bctx.stroke();
-  }
-  bctx.shadowBlur = 0;
-
-  // Kenarlara doğru hafif kararma (derinlik hissi)
-  const vg = bctx.createRadialGradient(CX,CY,Math.min(W,H)*0.35,CX,CY,Math.max(W,H)*0.72);
-  vg.addColorStop(0,'rgba(0,0,0,0)');
-  vg.addColorStop(1,'rgba(0,0,0,0.35)');
-  bctx.fillStyle=vg;
+  // ── Kumaş çerçeve (mousepad dışında kalan kenar): önce koyu zemin, sonra kumaş dokusu ──
+  bctx.fillStyle = '#12191c';
   bctx.fillRect(0,0,W,H);
+  bctx.save();
+  bctx.globalAlpha = 0.05;
+  const step = 6;
+  for(let y=0;y<H;y+=step){
+    for(let x=0;x<W;x+=step){
+      const v = Math.sin(x*0.1+y*0.15)*0.5+0.5;
+      bctx.fillStyle = v>0.5 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
+      bctx.fillRect(x,y,step,step);
+    }
+  }
+  bctx.restore();
 
-  // ── Mousepad kenar bezeli ──
   const inset = Math.max(16, Math.min(W,H)*0.028);
   const r = 22;
   const bx=inset, by=inset, bw=W-inset*2, bh=H-inset*2;
@@ -736,11 +707,207 @@ function drawMousepadTexture(bctx) {
     bctx.closePath();
   };
 
-  // Kumaş kenarının dışını hafifçe karart
+  // Kontur çizgi dokusunu ayrı bir tuvalde üret, sonra sadece mousepad'in
+  // iç (kırpılmış) alanına bas -- kenardaki kumaş çerçeve dokulu ve koyu kalsın.
+  const karstCanvas = document.createElement('canvas');
+  karstCanvas.width = W; karstCanvas.height = H;
+  const kctx = karstCanvas.getContext('2d');
+  kctx.fillStyle = '#050505';
+  kctx.fillRect(0,0,W,H);
+
+  const levels = [0.30,0.38,0.46,0.54,0.62,0.70];
+  kctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  kctx.lineWidth = 1.3;
+  kctx.lineCap = 'round';
+  kctx.shadowColor = 'rgba(255,255,255,0.35)';
+  kctx.shadowBlur = 1;
+
+  for(const level of levels){
+    kctx.beginPath();
+    for(let j=0;j<rows-1;j++){
+      for(let i=0;i<cols-1;i++){
+        const x0=i*cell, y0=j*cell;
+        const tl=val(i,j), tr=val(i+1,j), br=val(i+1,j+1), bl=val(i,j+1);
+        const cross=[];
+        const lerp=(va,vb)=> (level-va)/(vb-va);
+        if((tl>level)!==(tr>level)) cross.push({e:'top', p:[x0+cell*lerp(tl,tr), y0]});
+        if((tr>level)!==(br>level)) cross.push({e:'right', p:[x0+cell, y0+cell*lerp(tr,br)]});
+        if((bl>level)!==(br>level)) cross.push({e:'bottom', p:[x0+cell*lerp(bl,br), y0+cell]});
+        if((tl>level)!==(bl>level)) cross.push({e:'left', p:[x0, y0+cell*lerp(tl,bl)]});
+
+        if(cross.length===2){
+          kctx.moveTo(cross[0].p[0], cross[0].p[1]);
+          kctx.lineTo(cross[1].p[0], cross[1].p[1]);
+        } else if(cross.length===4){
+          const pt = e => cross.find(c=>c.e===e).p;
+          if(tl>level){
+            kctx.moveTo(...pt('top')); kctx.lineTo(...pt('left'));
+            kctx.moveTo(...pt('right')); kctx.lineTo(...pt('bottom'));
+          } else {
+            kctx.moveTo(...pt('top')); kctx.lineTo(...pt('right'));
+            kctx.moveTo(...pt('left')); kctx.lineTo(...pt('bottom'));
+          }
+        }
+      }
+    }
+    kctx.stroke();
+  }
+  kctx.shadowBlur = 0;
+
+  // Kenarlara doğru hafif kararma (derinlik hissi)
+  const vg = kctx.createRadialGradient(CX,CY,Math.min(W,H)*0.35,CX,CY,Math.max(W,H)*0.72);
+  vg.addColorStop(0,'rgba(0,0,0,0)');
+  vg.addColorStop(1,'rgba(0,0,0,0.35)');
+  kctx.fillStyle=vg;
+  kctx.fillRect(0,0,W,H);
+
+  bctx.save();
+  roundedPath(bx,by,bw,bh,r);
+  bctx.clip();
+  bctx.drawImage(karstCanvas, 0, 0);
+  bctx.restore();
+
+  // Kumaş kenarının içini hafifçe karart (derinlik/kabartma hissi)
   bctx.save();
   roundedPath(0,0,W,H,28);
   roundedPath(bx,by,bw,bh,r);
-  bctx.fillStyle = 'rgba(0,0,0,0.4)';
+  bctx.fillStyle = 'rgba(0,0,0,0.35)';
+  bctx.fill('evenodd');
+  bctx.restore();
+
+  // Dış gölge çizgisi (kabartma hissi)
+  bctx.save();
+  roundedPath(bx-1.5, by-1.5, bw+3, bh+3, r+2);
+  bctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  bctx.lineWidth = 3;
+  bctx.stroke();
+  bctx.restore();
+}
+
+/* ── Mousepad "Okyanus Dalga" teması: beyaz zemin üzerinde mavi tonlarda dolgulu kontur bantları ── */
+function drawMousepadTextureOcean(bctx) {
+  const seed = 8181;
+  const cell = 11;
+  const cols = Math.ceil(W/cell)+1;
+  const rows = Math.ceil(H/cell)+1;
+  const grid = new Float32Array(cols*rows);
+  for(let j=0;j<rows;j++){
+    for(let i=0;i<cols;i++){
+      grid[j*cols+i] = msFbm(i*cell, j*cell, seed);
+    }
+  }
+  const val = (i,j) => grid[j*cols+i];
+
+  // ── Kumaş çerçeve (mousepad dışında kalan kenar): önce koyu zemin, sonra kumaş dokusu ──
+  bctx.fillStyle = '#12191c';
+  bctx.fillRect(0,0,W,H);
+  bctx.save();
+  bctx.globalAlpha = 0.05;
+  const step = 6;
+  for(let y=0;y<H;y+=step){
+    for(let x=0;x<W;x+=step){
+      const v = Math.sin(x*0.1+y*0.15)*0.5+0.5;
+      bctx.fillStyle = v>0.5 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
+      bctx.fillRect(x,y,step,step);
+    }
+  }
+  bctx.restore();
+
+  const inset = Math.max(16, Math.min(W,H)*0.028);
+  const r = 22;
+  const bx=inset, by=inset, bw=W-inset*2, bh=H-inset*2;
+  const roundedPath = (x,y,w,h,rad) => {
+    bctx.beginPath();
+    bctx.moveTo(x+rad,y);
+    bctx.arcTo(x+w,y,x+w,y+h,rad);
+    bctx.arcTo(x+w,y+h,x,y+h,rad);
+    bctx.arcTo(x,y+h,x,y,rad);
+    bctx.arcTo(x,y,x+w,y,rad);
+    bctx.closePath();
+  };
+
+  // Açıktan koyuya mavi bantlar (görseldeki gibi beyaz zeminden derin laciverte)
+  const bandHex = ['#f2f5f4','#c3e2ec','#8fc9dd','#5aa8c8','#2f80ac','#175d88','#0b3d5e'];
+  const levels  = [0.24, 0.34, 0.42, 0.50, 0.58, 0.66];
+  const bandRgb = bandHex.map(hex=>{
+    const n = parseInt(hex.slice(1),16);
+    return [(n>>16)&255, (n>>8)&255, n&255];
+  });
+
+  // Bant dokusunu ayrı bir tuvalde üret (putImageData kırpmayı yok sayar,
+  // bu yüzden önce kendi tuvaline çiziyoruz, sonra kırparak asıl tuvale basıyoruz)
+  const oceanCanvas = document.createElement('canvas');
+  oceanCanvas.width = W; oceanCanvas.height = H;
+  const octx = oceanCanvas.getContext('2d');
+  const img = octx.createImageData(W,H);
+  const data = img.data;
+  for(let y=0;y<H;y++){
+    const gy = y/cell;
+    let iy = Math.floor(gy); if(iy>rows-2) iy=rows-2;
+    const fy = gy-iy, sy = msSmooth(fy);
+    for(let x=0;x<W;x++){
+      const gx = x/cell;
+      let ix = Math.floor(gx); if(ix>cols-2) ix=cols-2;
+      const fx = gx-ix, sx = msSmooth(fx);
+      const v00=val(ix,iy), v10=val(ix+1,iy), v01=val(ix,iy+1), v11=val(ix+1,iy+1);
+      const a=v00+(v10-v00)*sx, b=v01+(v11-v01)*sx;
+      const v=a+(b-a)*sy;
+      let bandIdx=0;
+      for(let k=0;k<levels.length;k++){ if(v>levels[k]) bandIdx=k+1; }
+      const c = bandRgb[bandIdx];
+      const idx=(y*W+x)*4;
+      data[idx]=c[0]; data[idx+1]=c[1]; data[idx+2]=c[2]; data[idx+3]=255;
+    }
+  }
+  octx.putImageData(img,0,0);
+
+  // Bant sınırlarında ince koyu lacivert kontur çizgisi (görseldeki çizgi hissi) -- aynı tuvale
+  octx.strokeStyle = 'rgba(8,28,42,0.55)';
+  octx.lineWidth = 1.6;
+  octx.lineCap = 'round';
+  for(const level of levels){
+    octx.beginPath();
+    for(let j=0;j<rows-1;j++){
+      for(let i=0;i<cols-1;i++){
+        const x0=i*cell, y0=j*cell;
+        const tl=val(i,j), tr=val(i+1,j), br=val(i+1,j+1), bl=val(i,j+1);
+        const cross=[];
+        const lerp=(va,vb)=> (level-va)/(vb-va);
+        if((tl>level)!==(tr>level)) cross.push({e:'top', p:[x0+cell*lerp(tl,tr), y0]});
+        if((tr>level)!==(br>level)) cross.push({e:'right', p:[x0+cell, y0+cell*lerp(tr,br)]});
+        if((bl>level)!==(br>level)) cross.push({e:'bottom', p:[x0+cell*lerp(bl,br), y0+cell]});
+        if((tl>level)!==(bl>level)) cross.push({e:'left', p:[x0, y0+cell*lerp(tl,bl)]});
+        if(cross.length===2){
+          octx.moveTo(cross[0].p[0], cross[0].p[1]);
+          octx.lineTo(cross[1].p[0], cross[1].p[1]);
+        } else if(cross.length===4){
+          const pt = e => cross.find(c=>c.e===e).p;
+          if(tl>level){
+            octx.moveTo(...pt('top')); octx.lineTo(...pt('left'));
+            octx.moveTo(...pt('right')); octx.lineTo(...pt('bottom'));
+          } else {
+            octx.moveTo(...pt('top')); octx.lineTo(...pt('right'));
+            octx.moveTo(...pt('left')); octx.lineTo(...pt('bottom'));
+          }
+        }
+      }
+    }
+    octx.stroke();
+  }
+
+  // Okyanus dokusunu SADECE mousepad'in iç (kırpılmış) alanına bas -- kenardaki
+  // kumaş çerçeve koyu ve dokulu kalsın, açık renkte kalmasın.
+  bctx.save();
+  roundedPath(bx,by,bw,bh,r);
+  bctx.clip();
+  bctx.drawImage(oceanCanvas, 0, 0);
+  bctx.restore();
+
+  // Kumaş kenarının içini hafifçe karart (derinlik/kabartma hissi)
+  bctx.save();
+  roundedPath(0,0,W,H,28);
+  roundedPath(bx,by,bw,bh,r);
+  bctx.fillStyle = 'rgba(0,0,0,0.35)';
   bctx.fill('evenodd');
   bctx.restore();
 
@@ -904,7 +1071,8 @@ const MAIN_THEMES = [
     colors:['#3a231c','#2c1a15','#1e120e'], lamp:'196,92,74' },
   { id:'main_forest', name:'ORMAN', cost:100, catType:'main',
     colors:['#1e3020','#152318','#0e1810'], lamp:'92,232,146' },
-  { id:'main_mousepad', name:'MOUSEPAD', cost:200, mousepad:true, lamp:'230,196,140', catType:'main' },
+  { id:'main_mousepad', name:'MOUSEPAD KARSTİK', cost:200, mousepad:true, lamp:'230,196,140', catType:'main' },
+  { id:'main_mousepad_ocean', name:'MOUSEPAD OKYANUS', cost:250, mousepad:true, mousepadStyle:'ocean', lamp:'92,180,214', catType:'main' },
   { id:'main_rgb', name:'RGB', cost:200, animated:true, catType:'main' }
 ];
 const MAIN_SHOP_STORAGE_KEY = 'keybound_main_shop_v1';
@@ -1628,14 +1796,14 @@ function runCountdown(onDone){
   gameState = 'COUNTDOWN';
   document.body.classList.add('countdown-active');
   const numEl = document.getElementById('countdown-num');
-  const seq = ['3','2','1','BAŞLA!'];
+  const seq = ['3','2','1', t().countdownGo];
   let i = 0;
   function tick(){
     numEl.classList.remove('tick','go');
     void numEl.offsetWidth; // reflow -- animasyonu her adımda sıfırdan başlatmak için
     numEl.textContent = seq[i];
     numEl.classList.add('tick');
-    if (seq[i] === 'BAŞLA!') numEl.classList.add('go');
+    if (seq[i] === t().countdownGo) numEl.classList.add('go');
     keyClack(i < 3 ? 'hit' : 'hit');
     i++;
     if (i < seq.length) {
